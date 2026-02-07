@@ -1,5 +1,28 @@
 import { Stack } from "expo-router";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 export default function RootLayout() {
-  return <Stack />;
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <Stack
+        screenOptions={{
+          headerStyle: {
+            backgroundColor: "#007AFF",
+          },
+          headerTintColor: "#fff",
+          headerTitleStyle: {
+            fontWeight: "bold",
+          },
+        }}
+      >
+        <Stack.Screen
+          name="index"
+          options={{
+            title: "Melbourne Navigation",
+            headerShown: true,
+          }}
+        />
+      </Stack>
+    </GestureHandlerRootView>
+  );
 }
