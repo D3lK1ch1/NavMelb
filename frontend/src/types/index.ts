@@ -3,14 +3,6 @@ export interface Coordinate {
   lng: number;
 }
 
-export interface TrafficLight {
-  id: string;
-  position: Coordinate;
-  state: "red" | "amber" | "green";
-  road: string;
-  direction: string;
-}
-
 export interface RouteOption {
   id: string;
   type: "car" | "ptv" | "combined";
