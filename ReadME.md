@@ -6,15 +6,18 @@ Can drive to station or which station has parking or else walking. Combination o
 Need-to-know: Due to using React Expo, making it a mobile navigation app, the code is tested purely through Android or IOS, unable to run in web.
 
 ## Features:
-* Lane tracking (Google Maps) with traffic light (Apple Maps)
-* Combination of PTV with car / Uber as a route than either-or (Important)
+* Combination of PTV with car / Uber as a route than either-or (Important) - Adding multiple stops for routing
+> Ensuring that markers are added on screen rather than just coordinates (pending)
+> Ensuring that distance is also visualized between place on screen (pending)
 -------------------------------------
+[Optional, once done]
 * Making sure that stations have car parks for the car
+* Lane tracking (Google Maps) with traffic light (Apple Maps)
 * Walking paths to be less confusing because it is hard to know where to walk in shopping centres / uni campus
 
 ## Configurations
 * Frontend (Mobile) = React Native - find one good for both Apple and Android
-* Mapping SDK = OSM (using free versions)
+* Mapping SDK = OSM (using free versions) aka Leaflet too
 * Backend = Node.js + Express (for route calc, data aggregation, parking and PTV API) + GraphQL
 -------------------------------------
 * Cloud Infrastructure = AWS / Google Cloud / Azure (host routing services, store user data, ML models) - check which one is free
@@ -22,7 +25,7 @@ Need-to-know: Due to using React Expo, making it a mobile navigation app, the co
 * AI / ML = TensorFlow Lite(For indoor positioning, walking direction disambiguation) = how to combine TensorFlow to JS?
 
 ## Constraints
-* Completely in JS, for the web development portion of the works. Other languages must integrate well with JS in the case of databases.
+* Completely in TS/JS, for the web development portion of the works. Other languages must integrate well with JS in the case of databases.
 * Followiing  Google Map and Apple Map samples aka Maps JavaScript API and Mapkit JS API respectively as base.
 
 Tech stack is in work while the navigation app is iteratively integrated, as features are being implemented one by one. 
