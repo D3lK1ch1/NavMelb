@@ -1,79 +1,10 @@
 import { Router, Request, Response } from "express";
-import { ApiResponse, Coordinate, TrafficLight } from "../types";
-import {
-  getAllTrafficLights,
-  getTrafficLightsByBounds,
-  calculateDistance,
-  lookupPlace,
-} from "../services/route-map.service";
+import { ApiResponse, Coordinate} from "../types";
+import {calculateDistance,lookupDestination} from "../services/route-map.service";
 
 const router = Router();
 
-/**
- * GET /traffic-lights
- * Returns all traffic lights (MVP - mock data)
- */
-router.get("/traffic-lights", (_req: Request, res: Response) => {
-  try {
-    const lights = getAllTrafficLights();
-    const response: ApiResponse<TrafficLight[]> = {
-      success: true,
-      data: lights,
-      timestamp: new Date().toISOString(),
-    };
-    res.json(response);
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: "Failed to fetch traffic lights",
-      timestamp: new Date().toISOString(),
-    });
-  }
-});
-
-/**
- * GET /traffic-lights/bounds?minLat=X&maxLat=X&minLng=X&maxLng=X
- * Returns traffic lights within view bounds
- */
-router.get("/traffic-lights/bounds", (req: Request, res: Response) => {
-  try {
-    const { minLat, maxLat, minLng, maxLng } = req.query;
-
-    if (!minLat || !maxLat || !minLng || !maxLng) {
-      return res.status(400).json({
-        success: false,
-        error: "Missing bounds parameters (minLat, maxLat, minLng, maxLng)",
-        timestamp: new Date().toISOString(),
-      });
-    }
-
-    const lights = getTrafficLightsByBounds(
-      parseFloat(minLat as string),
-      parseFloat(maxLat as string),
-      parseFloat(minLng as string),
-      parseFloat(maxLng as string)
-    );
-
-    const response: ApiResponse<TrafficLight[]> = {
-      success: true,
-      data: lights,
-      timestamp: new Date().toISOString(),
-    };
-    res.json(response);
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: "Failed to fetch traffic lights",
-      timestamp: new Date().toISOString(),
-    });
-  }
-});
-
-/**
- * GET /place/lookup?query=query
- * Returns lat/long for a place query
- */
-router.get("/place/lookup", (req: Request, res: Response) => {
+router.get("/destination/lookup", (req: Request, res: Response) => {
   try {
     const { query } = req.query;
 
@@ -85,7 +16,7 @@ router.get("/place/lookup", (req: Request, res: Response) => {
       });
     }
 
-    const coordinates = lookupPlace(query as string);
+    const coordinates = lookupDestination(query as string);
 
     if (!coordinates) {
       return res.status(404).json({
@@ -104,16 +35,12 @@ router.get("/place/lookup", (req: Request, res: Response) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: "Failed to lookup place",
+      error: "Failed to lookup destination",
       timestamp: new Date().toISOString(),
     });
   }
 });
 
-/**
- * POST /distance
- * Calculates distance between two coordinates
- */
 router.post(
   "/distance",
   (req: Request, res: Response) => {
