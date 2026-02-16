@@ -7,17 +7,6 @@ backend/node_modules/
 .expo/
 .expo-shared/
 dist/
-build/
-
-# Development
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Environment
-.env
 .env.local
 .env.*.local
 
