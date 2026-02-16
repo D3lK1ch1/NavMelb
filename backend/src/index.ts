@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import phase1Routes from "./routes/route";
+import mapRoutes from "./routes/route";
 
 dotenv.config();
 
@@ -14,12 +14,13 @@ app.get("/health", (_, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// Routes (Phase-based)
-app.use("/api/phase1", phase1Routes);
+// Routes (Map API)
+app.use("/api/map", mapRoutes);
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`🚀 Backend running on port ${PORT}`);
-  console.log(`📍 Melbourne Navigation App - Backend`);
+const PORT = 8081;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Backend running on port ${PORT}`);
+  console.log("Melbourne Navigation App - Backend");
   console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
 });

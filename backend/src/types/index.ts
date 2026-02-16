@@ -1,16 +1,6 @@
-// Type definitions for Navigation App
-
 export interface Coordinate {
   lat: number;
   lng: number;
-}
-
-export interface TrafficLight {
-  id: string;
-  position: Coordinate;
-  state: "red" | "amber" | "green";
-  road: string;
-  direction: string;
 }
 
 export interface RouteOption {
