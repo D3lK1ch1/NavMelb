@@ -1,6 +1,7 @@
 import axios from "axios";
 
-const API_BASE_URL = "http://192.168.0.103:8081/api/map";
+//APIs change based on wi-fi reconnections and reboots. Keep checking ipconfig etc for this.
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "http://10.109.18.1:8081/api/map";
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
