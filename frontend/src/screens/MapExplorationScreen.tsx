@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import {View, Text, TextInput, TouchableOpacity,ActivityIndicator} from "react-native";
+import {View, Text, TextInput, TouchableOpacity, ActivityIndicator, ScrollView} from "react-native";
 import { lookupDestination, calculateDistance } from "../services/api";
 import { Coordinate } from "../types";
 import MapComponent from "../components/MapComponent";
@@ -27,13 +27,14 @@ export const MapExplorationScreen: React.FC = () => {
 
       if (response.success && response.data) {
         if (!destination1) {
-          setDestination1(response.data);
+          setDestination1({ ...response.data, name: destinationQuery });
           setDestinationQuery("");
         } else {
-          setDestination2(response.data);
+          const newDestination2 = { ...response.data, name: destinationQuery };
+          setDestination2(newDestination2);
           setDestinationQuery("");
           if (destination1) {
-            await calculateDistanceBetweenDestinations(destination1, response.data);
+            await calculateDistanceBetweenDestinations(destination1, newDestination2);
           }
         }
       } else {
@@ -78,11 +79,18 @@ export const MapExplorationScreen: React.FC = () => {
     <View style={styles.container}>
       {showMap && (
         <View style={{ flex: 1 }}>
-          <MapComponent />
+          <MapComponent
+            markers={
+              [
+                destination1 && { lat: destination1.lat, lng: destination1.lng, label: destination1.name },
+                destination2 && { lat: destination2.lat, lng: destination2.lng, label: destination2.name},
+              ].filter(Boolean) as Array<{ lat: number; lng: number; label?: string }>
+            } />
         </View>
       )}
 
       <View style={styles.controlPanel}>
+        <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
         <Text style={styles.title}>Melbourne Navigation</Text>
         <Text style={styles.subtitle}>
           Search Destination
@@ -113,7 +121,7 @@ export const MapExplorationScreen: React.FC = () => {
 
         {destination1 && (
           <View style={styles.resultBox}>
-            <Text style={styles.resultLabel}>Place 1:</Text>
+            <Text style={styles.resultLabel}>{destination1.name}</Text>
             <Text style={styles.resultValue}>
               Lat: {destination1.lat.toFixed(4)}, Lng: {destination1.lng.toFixed(4)}
             </Text>
@@ -122,7 +130,7 @@ export const MapExplorationScreen: React.FC = () => {
 
         {destination2 && (
           <View style={styles.resultBox}>
-            <Text style={styles.resultLabel}>Place 2:</Text>
+            <Text style={styles.resultLabel}>{destination2.name}</Text>
             <Text style={styles.resultValue}>
               Lat: {destination2.lat.toFixed(4)}, Lng: {destination2.lng.toFixed(4)}
             </Text>
@@ -147,12 +155,10 @@ export const MapExplorationScreen: React.FC = () => {
             style={[styles.button, styles.secondaryButton]}
             onPress={() => setShowMap(!showMap)}
           >
+            <Text style={styles.buttonText}>{showMap ? "Hide Map" : "Show Map"}</Text>
           </TouchableOpacity>
         </View>
-
-        <Text style={styles.helpText}>
-          Try: &quot;Southern Cross&quot;, &quot;Parliament&quot;, &quot;Flinders Street&quot;
-        </Text>
+        </ScrollView>
       </View>
     </View>
   );

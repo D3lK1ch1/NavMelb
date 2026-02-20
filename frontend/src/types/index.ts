@@ -1,6 +1,7 @@
 export interface Coordinate {
   lat: number;
   lng: number;
+  name?: string;
 }
 
 export interface RouteOption {
