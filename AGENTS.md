@@ -76,14 +76,18 @@ Each session file should document:
 ## Known Issues & Fixes
 | Issue | Root Cause | Solution | Status |
 |-------|-----------|----------|--------|
-| MapComponent WebView injection silent failures | JavaScript errors in injected code don't propagate to React | Add error callback to injectJavaScript, wrap in try-catch | not-started |
+| Web libraries (react-leaflet) incompatible with React Native | DOM not available in RN environment, causes "document doesn't exist" error | Use WebView + injected Leaflet HTML (now implemented) | completed |
+| API_BASE_URL pointing to Expo dev server instead of backend | Configuration confusion between exp:// (dev) and http:// (backend) | Use http://IP:PORT/api/map format (Copilot 2025-02-16) | completed |
+| MapComponent not rendering on screen | Layout nesting in controlPanel with 50% maxHeight, {showMap} rendering boolean | Restructure layout: map above control panel, fix conditional render | completed |
+| Tile layer URL typo | https:/// instead of https:// caused invalid tile requests | Fixed typo in Leaflet HTML injection (Copilot 2025-02-16) | completed |
+| MapComponent WebView injection silent failures | JavaScript errors in injected code don't propagate to React | Add onError callback to WebView, wrap Leaflet init in try-catch | in-progress |
 | API service doesn't retry on timeout | Axios configured with 10s timeout but no retry mechanism | Add retry-axios or implement exponential backoff | not-started |
 | FrontendType `ParkingLot` not exported | Types defined in backend but missing in frontend | Export from frontend types/index.ts | not-started |
 | Mock traffic lights in memory only | AllTrafficLights() returns static array, no persistence | Use SQLite for Phase 1, migrate to PostGIS P2 | not-started |
 | No validation of coordinate bounds | Bounds query accepts any number, no earth-surface validation | Add lat [-90,90], lng [-180,180] validation in service | not-started |
-| Unused dependencies in package.json | redis, pg imported but not used (Phase 2+ planning) | Remove from devDependencies until needed | not-started |
-| Frontend .env EXPO_PUBLIC_API_URL fallback hardcoded | localhost:3001 won't work on iOS/Android devices | Update fallback to device IP or use .env.local per env | not-started |
+| Unused dependencies in package.json | ~~redis, pg~~ react-leaflet imported but not used | Removed react-leaflet, @types/leaflet, react-native-maps (Copilot 2025-02-16) | completed |
 | MapComponent region change handler not throttled | Fetches bounds on every region change event | Implement debounce on handleRegionChange (500ms) | not-started |
+| Port conflict (Expo vs Backend) | Both default to 8081, causing 404s on API calls hitting Expo | Move Backend to port 3000, update .env | completed |
 
 ---
 
@@ -94,7 +98,7 @@ Each session file should document:
 #### ✅ Implemented & Active
 - **React Native + Expo** - runs on iOS/Android only (no web)
 - **OSM (OpenStreetMap)** - via Leaflet.js in WebView, free tile layer at `https://tile.openstreetmap.org`
-- **Express + Node.js** - backend health check + phase-based routes on port 3001
+- **Express + Node.js** - backend health check + phase-based routes on port 3000
 - **Turf.js** - distance calculations and geospatial math (both frontend & backend)
 - **Axios** - centralized API client with 10s timeout (needs retry logic)
 - **WebView + JavaScript injection** - maps Leaflet to React Native screens
@@ -110,11 +114,14 @@ Each session file should document:
 | PTV (Public Transport Victoria) API | Not integrated | For real public transport route data |
 
 #### 🧹 Cleanup Needed
-| Dependency | Current | Issue | Action |
-|-----------|---------|-------|--------|
-| `pg@8.11.3` | Backend | Imported but unused (Phase 2 planning) | Keep until Phase 2 starts |
-| `redis@4.6.12` | Backend | Imported but unused (Phase 2 planning) | Keep until Phase 2 starts |
-| `react-native-maps@1.14.0` | Frontend | Not used (using WebView + Leaflet instead) | Remove - using Leaflet approach instead |
+| Dependency | Current | Issue | Action | Status |
+|-----------|---------|-------|--------|--------|
+| `pg@8.11.3` | Backend | Imported but unused (Phase 2 planning) | Keep until Phase 2 starts | - |
+| `redis@4.6.12` | Backend | Imported but unused (Phase 2 planning) | Keep until Phase 2 starts | - |
+| ~~`react-native-maps@1.14.0`~~ | ~~Frontend~~ | ~~Not used (using WebView + Leaflet)~~ | ~~Removed~~ | ✅ Copilot 2025-02-16 |
+| ~~`react-leaflet@5.0.0`~~ | ~~Frontend~~ | ~~DOM errors in React Native~~ | ~~Removed~~ | ✅ Copilot 2025-02-16 |
+| ~~`@types/leaflet@1.9.21`~~ | ~~Frontend~~ | ~~Web lib types not needed~~ | ~~Removed~~ | ✅ Copilot 2025-02-16 |
+| ~~`react-dom@19.1.0`~~ | ~~Frontend~~ | ~~Web only, not for RN~~ | ~~Removed~~ | ✅ Copilot 2025-02-16 |
 
 ### Backend
 - [x] Route handlers - basic try-catch implemented, no unit tests
@@ -124,15 +131,21 @@ Each session file should document:
 - [ ] Error handling - edge cases: invalid coords, missing bounds params (has 400 validation), null responses
 
 ### Frontend
-- [x] MapComponent - WebView-based Leaflet rendering works but needs stress testing:
-  - [ ] Map region change events and bounds queries
+- [x] MapComponent - WebView-based Leaflet rendering working (Copilot 2025-02-16):
+  - [x] Layout restructured to render above control panel
+  - [x] Tile layer URL fixed (https:// typo resolved)
+  - [x] Leaflet HTML injected successfully via WebView
+  - [ ] Map region change events and bounds queries (TODO)
   - [ ] Marker update injection via JavaScript (potential race conditions)
   - [ ] Loading states during traffic light fetch
-- [x] MapExplorationScreen - state management implemented, needs testing:
+  - [ ] WebView onError callback for silent failures
+- [x] MapExplorationScreen - state management implemented, layout fixed:
+  - [x] Conditional rendering of map fixed ({showMap} boolean issue)
   - [ ] Multiple place searches without reset
   - [ ] Distance calculation accuracy
   - [ ] Error recovery from API failures
-- [ ] API service - axios client setup done, needs:
+- [x] API service - axios client configured correctly:
+  - [x] API_BASE_URL points to backend (http://192.168.0.103:8081/api/map)
   - [ ] Timeout handling (10s timeout configured, needs validation)
   - [ ] Retry logic for failed requests
   - [ ] Network error handling
@@ -142,8 +155,9 @@ Each session file should document:
 ### Known Gaps
 - **No unit/integration tests** - test script in package.json echoes error
 - **No database integration** - using mock data loaded in memory (Phase 2+)
-- **WebView communication fragile** - JavaScript injection via injectJavaScript could fail silently
-- **No API versioning** - hardcoded `/phase1/` prefix, no backward compatibility planned
+- **WebView error handling** - Leaflet JS errors wrapped in try-catch but no React-side error callback yet (in-progress)
+- **No API versioning** - hardcoded `/api/map` prefix, no backward compatibility planned
+- **No marker injection** - MapComponent accepts markers prop but doesn't update after initial render
 
 ---
 
@@ -179,32 +193,83 @@ When implementing features:
 
 **Phase 1a: Map Foundation** (Commits: d18ef30 "Showing off map", 1cbf91b "Cleaning up")
 - ✅ Backend Express setup with health check endpoint
-- ✅ Traffic lights API (`/phase1/traffic-lights`, `/phase1/traffic-lights/bounds`)
+- ✅ Traffic lights API (`/api/map` routes)
 - ✅ Place lookup and distance calculation services
 - ✅ Frontend MapComponent using Leaflet via WebView for React Native compatibility
 - ✅ MapExplorationScreen with interactive place search
 - ✅ Type alignment: `Coordinate`, `TrafficLight`, `RouteOption`, `Station`, `ApiResponse<T>`
-- ✅ Mock traffic light data for Melbourne CBD (5 intersections)
+- ✅ Mock traffic light data for Melbourne CBD
 - ✅ Error handling with try-catch in routes
 - ✅ CORS and environment variable support (.env.example files)
+
+**[COPILOT] 2025-02-16 - Frontend/Backend Integration Testing & Fixes**
+- **Task**: Test backend connectivity with Expo Go; fix rendering and API issues
+- **What Worked**: 
+  - Backend running on port 8081 with CORS enabled
+  - WebView + injected Leaflet HTML approach (correct for React Native)
+  - Layout restructure (map above control panel) fixed visibility
+  - Fixed API URL configuration (http:// not exp://)
+- **What Failed**:
+  - MapComponent using react-leaflet (web lib) → "document doesn't exist" error
+  - Tile layer URL typo (https:/// instead of https://)
+  - API_BASE_URL pointed to Expo dev server instead of backend
+  - JSX error: {showMap} rendering boolean value
+  - Layout: MapComponent nested in controlPanel with maxHeight:50% made it invisible
+- **What Fixed**:
+  - Deleted react-leaflet, @types/leaflet, react-native-maps, react-dom
+  - Rewrote MapComponent to use WebView with Leaflet HTML injection
+  - Fixed tile layer URL typo
+  - Fixed {showMap} to conditional render with &&
+  - Restructured layout: map above control panel
+  - Updated API_BASE_URL to http://192.168.0.103:8081/api/map
+- **Testing Results**: Map renders on Expo Go, search queries now reach backend (404 errors resolved)
+- **Next Steps**: Add WebView onError handler, test markers injection, validate distance calculations
 
 **Timeline:**
 - 5 days ago: Initial Expo React Native app + Backend init
 - 20 hours ago: Map implementation & cleanups
-- Current: Phase 1a complete, ready for Phase 1b expansion
+- 2025-02-16: Frontend/backend integration issues + full recovery (Copilot session)
+- Current: Phase 1a functional, testing Phase 1b place search
+
+**[GEMINI] 2026-02-20 - Environment Configuration**
+- **Task**: Create .env file for API_BASE_URL to facilitate physical device testing
+- **What Worked**: 
+  - Created `frontend/.env` with `EXPO_PUBLIC_API_BASE_URL`
+  - Updated `api.ts` to consume environment variable
+- **Next Steps**: Verify connectivity on physical device
+
+**[CODEX] 2026-02-23 - Git Ignore Hygiene (Root + Backend)**
+- **Task**: Reduce noisy git changes and avoid repeatedly adding generated backend/frontend files.
+- **What Worked**:
+  - Confirmed root `.gitignore` can cover the entire repo (`node_modules/`, build artifacts, logs, env variants).
+  - Added `backend/.gitignore` to make backend ignore intent explicit during transition.
+  - Identified root cause of noise: `backend/node_modules` was already tracked in git, so ignore rules were not being applied.
+  - Provided cleanup command flow using `git rm -r --cached` to untrack dependencies while keeping files locally.
+- **What Failed**:
+  - Relying on `.gitignore` alone did not hide existing tracked files.
+- **Testing Results**:
+  - Verified with `git status --short` that backend dependency files were tracked and causing large modified/deleted lists.
+  - Verified tracked file count under `backend/node_modules` before cleanup.
+- **Next Steps**:
+  - Run one-time untrack commands for `backend/node_modules` and `frontend/node_modules`.
+  - Keep a single root `.gitignore` as source of truth (or keep per-folder files only if team prefers local clarity).
 
 ---
 
 ## Repeating Mistakes Log
 Track mistakes across agent conversations to avoid regression:
-| Mistake | Occurrence | Prevention |
-|---------|-----------|-----------|
-| WebView JavascriptError not caught | MapComponent silently fails if Leaflet JS throws | Always add onError callback to WebView, test JS string syntax before injection |
-| Type definitions drift between backend/frontend | Frontend ParkingLot missing, RouteOption may diverge | Run type comparison test: ensure backend types exported + imported in frontend, add CI check |
-| Async state not cancelled in cleanup | Memory leak if component unmounts during API call, stale setState | Add AbortController in API service, check mounted ref in useEffect cleanup |
-| Bounds validation missing | API accepts invalid coords (-37.5000, -37.9000 swapped), causes wrong results | Add minLat < maxLat assertion in getTrafficLightsByBounds service |
-| Error responses not typed | API returns 400/500 responses without error payload contract | Define ErrorResponse interface in types, validate in error handler catch blocks |
+| Mistake | Occurrence | Prevention | Updated |
+|---------|-----------|-----------|----------|
+| Using web libraries in React Native | MapComponent used react-leaflet (DOM-based) instead of WebView | Always verify library target (web vs RN) before importing | Copilot 2025-02-16 |
+| Configuration confusion (dev vs backend) | API_BASE_URL pointed to exp:// (Expo dev) instead of http:// (backend) | Document dev server port vs backend port separately in .env.example | Copilot 2025-02-16 |
+| Layout nesting causing hidden components | MapComponent inside controlPanel with maxHeight:50% made it invisible | Check flex layout hierarchy before nesting components | Copilot 2025-02-16 |
+| URL typos in injected HTML | Tile layer had https:/// instead of https:// | Validate string interpolation in template literals before injection | Copilot 2025-02-16 |
+| JSX rendering non-component values | {showMap} rendered boolean instead of conditional component | Validate JSX expressions: only render components/elements, not primitives | Copilot 2025-02-16 |
+| WebView JavascriptError not caught | MapComponent silently fails if Leaflet JS throws | Always add onError callback to WebView, test JS string syntax before injection | - |
+| Type definitions drift between backend/frontend | Frontend ParkingLot missing, RouteOption may diverge | Run type comparison test: ensure backend types exported + imported in frontend, add CI check | - |
+| Async state not cancelled in cleanup | Memory leak if component unmounts during API call, stale setState | Add AbortController in API service, check mounted ref in useEffect cleanup | - |
+| Bounds validation missing | API accepts invalid coords (-37.5000, -37.9000 swapped), causes wrong results | Add minLat < maxLat assertion in getTrafficLightsByBounds service | - |
+| Error responses not typed | API returns 400/500 responses without error payload contract | Define ErrorResponse interface in types, validate in error handler catch blocks | - |
+| Expecting `.gitignore` to hide already tracked dependencies | `node_modules` was committed previously, so git keeps showing changes | Run one-time `git rm -r --cached <path>/node_modules` then commit ignore rules | Codex 2026-02-23 |
 
 --- 
-
-
