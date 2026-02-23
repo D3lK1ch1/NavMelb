@@ -3,7 +3,21 @@
 Combining best of Apple (traffic light configuration) and Google map features (path finding)
 Can drive to station or which station has parking or else walking. Combination of driving + PTV for best route, knowing which station has parking. App has traffic lights established + lane to turn to.
 
-Need-to-know: Due to using React Expo, making it a mobile navigation app, the code is tested purely through Android or IOS, unable to run in web.
+Need-to-know: Due to using React Expo, making it a mobile navigation app, the code is tested purely through Android or IOS, unable to render the map in web.
+
+# Getting Started
+
+After either forking or cloning the repo, run `npm install` to install all dependencies.
+
+At backend, run:
+
+npm run dev
+
+At frontend remember to install Expo Go on phone and scan the QR code to test the app and ensure the .env with the url is the same as from ipconfig for networking purposes, and then run:
+
+npx expo start --lan
+
+Need-to-know: remote error with gtfs folder because of large file size limit. If location search does not work due to large file size, add on your own from url: https://discover.data.vic.gov.au/dataset/gtfs-schedule
 
 ## Features:
 * Combination of PTV with car / Uber as a route than either-or (Important) - Adding multiple stops for routing
