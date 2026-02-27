@@ -3,15 +3,24 @@ export interface Coordinate {
   lng: number;
 }
 
+export interface RouteSegment {
+  type: "car" | "train";
+  coordinates: number[][];
+  color: string;
+  distance?: number;
+  duration?: number;
+}
+
 export interface RouteOption {
   id: string;
-  type: "car" | "ptv" | "combined";
+  type: "car" | "ptv";
   startPoint: Coordinate;
   endPoint: Coordinate;
-  distance: number; // in meters
-  duration: number; // in seconds
+  distance: number;
+  duration: number;
   waypoints?: Coordinate[];
   cost?: number;
+  segments?: RouteSegment[];
 }
 
 export interface Station {
@@ -21,16 +30,6 @@ export interface Station {
   hasParking: boolean;
   parkingCapacity?: number;
   parkingAvailable?: number;
-}
-
-export interface ParkingLot {
-  id: string;
-  name: string;
-  position: Coordinate;
-  capacity: number;
-  available: number;
-  costPerHour?: number;
-  nearbyStation?: string;
 }
 
 export interface ApiResponse<T> {
