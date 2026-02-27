@@ -1,13 +1,15 @@
 import { useEffect, useRef } from "react";
 import { View } from "react-native";
 import { WebView } from "react-native-webview";
+import { RouteSegment } from "../types";
 
 type Marker = { lat: number; lng: number; label?: string };
 type MapComponentProps = {
   center?: [number, number];
   zoom?: number;
   markers?: Marker[];
-  waypoints?: Marker[]; // dynamic routing points
+  waypoints?: Marker[];
+  routeSegments?: RouteSegment[];
 };
 
 export default function MapComponent({
@@ -15,6 +17,7 @@ export default function MapComponent({
   zoom = 13,
   markers = [],
   waypoints = [],
+  routeSegments = [],
 }: MapComponentProps) {
   const webViewRef = useRef<WebView>(null);
 
@@ -38,8 +41,8 @@ export default function MapComponent({
     margin: 0;
     padding: 0;
   }
-  .leaflet-routing-container { 
-    background: rgba(255,255,255,0.9); 
+  .leaf-routing-container { 
+    display: none; 
   }
 </style>
 </head>
@@ -51,11 +54,12 @@ export default function MapComponent({
 <script>
   const map = L.map('map').setView([${center[0]}, ${center[1]}], ${zoom});
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors'
   }).addTo(map);
 
   let markersLayer = L.layerGroup().addTo(map);
+  let polylinesLayer = L.layerGroup().addTo(map);
   let routingControl = null;
 
   function updateMarkers(markerList) {
@@ -71,13 +75,36 @@ export default function MapComponent({
     });
   }
 
+  function updateRouteSegments(segments) {
+    polylinesLayer.clearLayers();
+    if (routingControl) {
+      map.removeControl(routingControl);
+      routingControl = null;
+    }
+    
+    segments.forEach(seg => {
+      const polyline = L.polyline(seg.coordinates, {
+        color: seg.color,
+        weight: 5,
+        opacity: 0.8,
+      }).addTo(polylinesLayer);
+    });
+    
+    if (segments.length > 0) {
+      const bounds = L.latLngBounds(
+        segments.flatMap(s => s.coordinates)
+      );
+      map.fitBounds(bounds, { padding: [50, 50] });
+    }
+  }
+
   function updateWaypoints(waypointsList) {
     if (routingControl) {
       map.removeControl(routingControl);
       routingControl = null;
     }
 
-    if (waypointsList.length < 2) return; // Need at least 2 points for routing
+    if (waypointsList.length < 2) return;
 
     const wp = waypointsList.map(p => L.latLng(p.lat, p.lng));
     routingControl = L.Routing.control({
@@ -86,24 +113,23 @@ export default function MapComponent({
       lineOptions: {
         styles: [{ color: 'blue', opacity: 0.8, weight: 6 }]
       },
-      createMarker: function() { return null; } // prevent duplicate markers
+      createMarker: function() { return null; }
     }).addTo(map);
 
-    // Fit map bounds to include all waypoints
     const bounds = L.latLngBounds(wp);
     map.fitBounds(bounds, { padding: [50, 50] });
   }
 
-  // Initial render
   updateMarkers(${JSON.stringify(markers)});
+  updateRouteSegments(${JSON.stringify(routeSegments)});
   updateWaypoints(${JSON.stringify(waypoints)});
 
-  // Listen to messages from React Native
   function handleMessage(event) {
     try {
       const data = JSON.parse(event.data);
       if(data.type === 'updateMarkers') updateMarkers(data.markers || []);
       if(data.type === 'updateWaypoints') updateWaypoints(data.waypoints || []);
+      if(data.type === 'updateRouteSegments') updateRouteSegments(data.routeSegments || []);
     } catch(e) {
       console.error(e);
     }
@@ -116,7 +142,6 @@ export default function MapComponent({
 </html>
 `;
 
-  // Send updated markers to WebView
   useEffect(() => {
     if (webViewRef.current) {
       webViewRef.current.postMessage(
@@ -125,7 +150,6 @@ export default function MapComponent({
     }
   }, [markers]);
 
-  // Send updated waypoints to WebView
   useEffect(() => {
     if (webViewRef.current) {
       webViewRef.current.postMessage(
@@ -133,6 +157,14 @@ export default function MapComponent({
       );
     }
   }, [waypoints]);
+
+  useEffect(() => {
+    if (webViewRef.current) {
+      webViewRef.current.postMessage(
+        JSON.stringify({ type: "updateRouteSegments", routeSegments })
+      );
+    }
+  }, [routeSegments]);
 
   return (
     <View style={{ flex: 1 }}>
