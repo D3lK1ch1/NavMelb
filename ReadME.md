@@ -21,8 +21,8 @@ Need-to-know: remote error with gtfs folder because of large file size limit. If
 
 ## Features:
 * Combination of PTV with car / Uber as a route than either-or (Important) - Adding multiple stops for routing
-> Ensuring that markers are added on screen rather than just coordinates (pending)
-> Ensuring that distance is also visualized between place on screen (pending)
+> Ensuring that markers are added on screen rather than just coordinates (working)
+> Ensuring that distance is also visualized between place on screen (working)
 -------------------------------------
 [Optional, once done]
 * Making sure that stations have car parks for the car
@@ -43,3 +43,6 @@ Need-to-know: remote error with gtfs folder because of large file size limit. If
 * Followiing  Google Map and Apple Map samples aka Maps JavaScript API and Mapkit JS API respectively as base.
 
 Tech stack is in work while the navigation app is iteratively integrated, as features are being implemented one by one. 
+
+## Current Progress
+Not necessarily satisfied with AI integration on the template for my definition to make a multi routing for car and PTV, ranging from problems with unclear button uses, unclear data information about stations, still from starting point and destination without input about station in between ex. Car -> Station -> Destination. Figuring out the problems, learning how to narrow down code to fix this one by one.

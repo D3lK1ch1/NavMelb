@@ -14,40 +14,6 @@ This markdown is used throughout all projects, as rules and regulations to proje
 - Always cross-reference this file when starting new sessions
 - Ensure the user follows the guidelines to research -> plan -> execute -> review -> revise
 ---
-
-## Session Organization
-- Maintain separate conversation folders per agent per project
-- NavMelb project: `backend/` and `frontend/` with clear separation of concerns (as example)
-- Each session should prefix decisions with agent name and timestamp
-
-### Suggested Folder Structure for Sessions
-```
-NavMelb/
-├── _sessions/
-│   ├── copilot/
-│   │   ├── 2025-02-08_phase1a_mapfoundation.md
-│   │   └── 2025-02-09_phase1b_station_search.md
-│   ├── windsurf/
-│   │   └── 2025-02-08_api_optimization.md
-│   ├── codex/
-│   │   └── [future sessions]
-│   └── gemini/
-│       └── [future sessions]
-├── backend/
-├── frontend/
-└── AGENTS.md
-```
-
-Each session file should document:
-- **Date & Agent**: `[COPILOT] 2025-02-08`
-- **Task**: What was requested
-- **What Worked**: Implementations that succeeded
-- **What Failed**: Issues encountered + root cause
-- **Testing Results**: What was validated, what passed/failed
-- **Next Steps**: Blockers or items for next session
-
----
-
 ## Core Instructions
 
 - Find and read docs, give a boiler plate but not core functionality. 
@@ -193,12 +159,10 @@ When implementing features:
 
 **Phase 1a: Map Foundation** (Commits: d18ef30 "Showing off map", 1cbf91b "Cleaning up")
 - ✅ Backend Express setup with health check endpoint
-- ✅ Traffic lights API (`/api/map` routes)
+- ✅ Traffic lights API (`/api/map` routes) - Disregarded
 - ✅ Place lookup and distance calculation services
 - ✅ Frontend MapComponent using Leaflet via WebView for React Native compatibility
 - ✅ MapExplorationScreen with interactive place search
-- ✅ Type alignment: `Coordinate`, `TrafficLight`, `RouteOption`, `Station`, `ApiResponse<T>`
-- ✅ Mock traffic light data for Melbourne CBD
 - ✅ Error handling with try-catch in routes
 - ✅ CORS and environment variable support (.env.example files)
 
@@ -213,7 +177,7 @@ When implementing features:
   - MapComponent using react-leaflet (web lib) → "document doesn't exist" error
   - Tile layer URL typo (https:/// instead of https://)
   - API_BASE_URL pointed to Expo dev server instead of backend
-  - JSX error: {showMap} rendering boolean value
+  - JSX error: {showMap} rendered boolean instead of conditional component
   - Layout: MapComponent nested in controlPanel with maxHeight:50% made it invisible
 - **What Fixed**:
   - Deleted react-leaflet, @types/leaflet, react-native-maps, react-dom
@@ -224,6 +188,27 @@ When implementing features:
   - Updated API_BASE_URL to http://192.168.0.103:8081/api/map
 - **Testing Results**: Map renders on Expo Go, search queries now reach backend (404 errors resolved)
 - **Next Steps**: Add WebView onError handler, test markers injection, validate distance calculations
+
+**Phase 1b: Multi-Stop Station Routing** (Current)
+- **Task**: Implement car → train combined routing using GTFS stations, OSRM for road routes
+- **What Implemented**:
+  - Backend: Added `RouteSegment` type, `osrmRoute()`, `findNearestStations()`, `getTrainRoute()` services
+  - Backend: New endpoints `/stations/search`, `/stations/nearest`, `/route/calculate`
+  - Frontend: Added `routeSegments` prop to MapComponent for polyline rendering
+  - Frontend: Updated MapExplorationScreen with station search, route type selector, multi-stop workflow
+  - Frontend: Color-coded routes (blue=car, red=train)
+- **What Changed**:
+  - `backend/src/types/index.ts` - Added RouteSegment interface
+  - `backend/src/services/route-map.service.ts` - Added OSRM integration, GTFS station lookup
+  - `backend/src/routes/route.ts` - Added /stations/search, /stations/nearest, /route/calculate
+  - `backend/src/services/gtfs-stop-indexservice.ts` - Added getAllStops() export
+  - `frontend/src/types/index.ts` - Added RouteSegment interface
+  - `frontend/src/services/api.ts` - Added searchStations, getNearestStations, calculateRoute
+  - `frontend/src/components/MapComponent.tsx` - Added routeSegments rendering via L.polyline
+  - `frontend/src/screens/MapExplorationScreen.tsx` - Full multi-stop workflow UI
+  - `frontend/src/styles/mapExploration.ts` - Added new UI styles
+- **Testing Results**: Pending - requires backend server and Expo Go testing
+- **Next Steps**: Test OSRM connectivity, verify GTFS station search, validate route display
 
 **Timeline:**
 - 5 days ago: Initial Expo React Native app + Backend init
