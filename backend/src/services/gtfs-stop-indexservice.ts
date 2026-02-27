@@ -76,3 +76,11 @@ export function findStopCoordinate(query: string): Coordinate | null {
   const key = normalizeName(query);
   return stopIndex.get(key) || null;
 }
+
+export function getAllStops(): { name: string; position: Coordinate }[] {
+  const stops: { name: string; position: Coordinate }[] = [];
+  stopIndex.forEach((position, name) => {
+    stops.push({ name, position });
+  });
+  return stops.sort((a, b) => a.name.localeCompare(b.name));
+}
