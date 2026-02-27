@@ -4,15 +4,24 @@ export interface Coordinate {
   name?: string;
 }
 
+export interface RouteSegment {
+  type: "car" | "train";
+  coordinates: number[][];
+  color: string;
+  distance?: number;
+  duration?: number;
+}
+
 export interface RouteOption {
   id: string;
-  type: "car" | "ptv" | "combined";
+  type: "car" | "ptv";
   startPoint: Coordinate;
   endPoint: Coordinate;
   distance: number;
   duration: number;
   waypoints?: Coordinate[];
   cost?: number;
+  segments?: RouteSegment[];
 }
 
 export interface Station {

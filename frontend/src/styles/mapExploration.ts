@@ -99,4 +99,65 @@ export const mapExplorationStyles = StyleSheet.create({
     marginTop: 10,
     fontStyle: "italic",
   },
+  routeTypeContainer: {
+    flexDirection: "row",
+    marginBottom: 15,
+    gap: 10,
+  },
+  routeTypeButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    backgroundColor: "#e0e0e0",
+    alignItems: "center",
+  },
+  routeTypeActive: {
+    backgroundColor: "#007AFF",
+  },
+  routeTypeText: {
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  searchModeContainer: {
+    flexDirection: "row",
+    marginBottom: 15,
+    gap: 10,
+  },
+  modeButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 6,
+    backgroundColor: "#f0f0f0",
+    alignItems: "center",
+  },
+  modeActive: {
+    backgroundColor: "#34C759",
+  },
+  modeText: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  resultsContainer: {
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    overflow: "hidden",
+  },
+  resultItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  resultText: {
+    fontSize: 14,
+    color: "#000",
+  },
+  primaryButton: {
+    backgroundColor: "#34C759",
+    flex: 1,
+  },
 });

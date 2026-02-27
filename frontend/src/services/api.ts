@@ -1,6 +1,6 @@
 import axios from "axios";
+import { RouteSegment, Coordinate } from "../types";
 
-//APIs change based on wi-fi reconnections and reboots. Keep checking ipconfig etc for this.
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
 export const api = axios.create({
@@ -30,6 +30,38 @@ export async function calculateDistance(
     return response.data;
   } catch (error) {
     console.error("Failed to calculate distance:", error);
+    throw error;
+  }
+}
+
+export async function searchStations(query: string, limit?: number) {
+  try {
+    const response = await api.get("/stations/search", {
+      params: { query, limit },
+    });
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to search stations "${query}":`, error);
+    throw error;
+  }
+}
+
+export async function calculateRoute(
+  from: Coordinate,
+  to: Coordinate,
+  routeType: "car" | "train",
+  viaStations?: Coordinate[]
+) {
+  try {
+    const response = await api.post("/route/calculate", {
+      from,
+      to,
+      routeType,
+      viaStations,
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Failed to calculate route:", error);
     throw error;
   }
 }
