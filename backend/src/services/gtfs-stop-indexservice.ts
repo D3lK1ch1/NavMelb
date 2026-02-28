@@ -10,7 +10,14 @@ type StopRow = {
   stop_lon: string;
 };
 
-const stopIndex = new Map<string, Coordinate>();
+export type TransportType = "tram" | "train" | "bus";
+
+export interface StopEntry {
+  position: Coordinate;
+  transportType: TransportType;
+}
+
+const stopIndex = new Map<string, StopEntry>();
 
 function normalizeName(value: string): string {
   return value
@@ -20,6 +27,21 @@ function normalizeName(value: string): string {
     .replace(/\bstation\b/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function getTransportType(feedDir: string): TransportType {
+  const folderNum = feedDir.replace(/\D/g, "");
+  const mapping: Record<string, TransportType> = {
+    "1": "train",
+    "2": "train",
+    "3": "tram",
+    "4": "bus",
+    "5": "bus",
+    "6": "bus",
+    "10": "train",
+    "11": "bus",
+  };
+  return mapping[folderNum] || "bus";
 }
 
 export function loadGtfsStops(): void {
@@ -43,6 +65,8 @@ export function loadGtfsStops(): void {
       continue;
     }
 
+    const transportType = getTransportType(feedDir);
+
     const zip = new AdmZip(zipPath);
     const entry = zip.getEntry("stops.txt");
     if (!entry) {
@@ -65,22 +89,35 @@ export function loadGtfsStops(): void {
         continue;
       }
 
-      if (!stopIndex.has(name)) {
-        stopIndex.set(name, { lat, lng });
+      const existing = stopIndex.get(name);
+      if (!existing) {
+        stopIndex.set(name, { position: { lat, lng }, transportType });
+      } else if (existing.transportType === "bus" && transportType !== "bus") {
+        stopIndex.set(name, { position: { lat, lng }, transportType });
       }
     }
   }
 }
 
-export function findStopCoordinate(query: string): Coordinate | null {
+export function findStopCoordinate(query: string): { position: Coordinate; transportType: TransportType } | null {
   const key = normalizeName(query);
   return stopIndex.get(key) || null;
 }
 
-export function getAllStops(): { name: string; position: Coordinate }[] {
-  const stops: { name: string; position: Coordinate }[] = [];
-  stopIndex.forEach((position, name) => {
-    stops.push({ name, position });
+export interface StopInfo {
+  name: string;
+  position: Coordinate;
+  transportType: TransportType;
+}
+
+export function getAllStops(): StopInfo[] {
+  const stops: StopInfo[] = [];
+  stopIndex.forEach((entry, name) => {
+    stops.push({ name, position: entry.position, transportType: entry.transportType });
   });
   return stops.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function getStopsByType(type: TransportType): StopInfo[] {
+  return getAllStops().filter((s) => s.transportType === type);
 }
