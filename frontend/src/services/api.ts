@@ -1,5 +1,5 @@
 import axios from "axios";
-import { RouteSegment, Coordinate } from "../types";
+import { RouteSegment, Coordinate, Waypoint, RouteStrategy, RouteResult } from "../types";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
@@ -34,10 +34,14 @@ export async function calculateDistance(
   }
 }
 
-export async function searchStations(query: string, limit?: number) {
+export async function searchStations(
+  query: string,
+  limit?: number,
+  transportType?: "tram" | "train" | "bus"
+) {
   try {
     const response = await api.get("/stations/search", {
-      params: { query, limit },
+      params: { query, limit, transportType },
     });
     return response.data;
   } catch (error) {
@@ -47,17 +51,17 @@ export async function searchStations(query: string, limit?: number) {
 }
 
 export async function calculateRoute(
-  from: Coordinate,
-  to: Coordinate,
-  routeType: "car" | "train",
-  viaStations?: Coordinate[]
+  origin: Coordinate,
+  destination: Coordinate,
+  strategy: RouteStrategy,
+  waypoints?: Waypoint[]
 ) {
   try {
-    const response = await api.post("/route/calculate", {
-      from,
-      to,
-      routeType,
-      viaStations,
+    const response = await api.post<{ success: boolean; data?: RouteResult }>("/route/calculate", {
+      origin,
+      destination,
+      waypoints,
+      strategy,
     });
     return response.data;
   } catch (error) {

@@ -1,26 +1,44 @@
-import React, { useState } from "react";
-import {View, Text, TextInput, TouchableOpacity, ActivityIndicator, ScrollView} from "react-native";
+import React, { useState, useEffect, useCallback } from "react";
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, ScrollView } from "react-native";
 import { lookupDestination, searchStations, calculateRoute } from "../services/api";
-import { Coordinate, RouteSegment } from "../types";
+import { Coordinate, Waypoint, RouteSegment, RouteStrategy, RouteResult } from "../types";
 import MapComponent from "../components/MapComponent";
 import { mapExplorationStyles as styles } from "../styles/mapExploration";
 
-type SearchMode = "destination" | "station";
-
 export const MapExplorationScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
-  const [startPoint, setStartPoint] = useState<Coordinate | null>(null);
+  const [origin, setOrigin] = useState<Coordinate | null>(null);
   const [destination, setDestination] = useState<Coordinate | null>(null);
-  const [stations, setStations] = useState<Coordinate[]>([]);
-  const [stationNames, setStationNames] = useState<string[]>([]);
-  const [searchResults, setSearchResults] = useState<{name: string; position: Coordinate}[]>([]);
-  const [searchMode, setSearchMode] = useState<SearchMode>("destination");
+  const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
+  const [searchResults, setSearchResults] = useState<{ name: string; position: Coordinate; transportType: string }[]>([]);
+  const [strategy, setStrategy] = useState<RouteStrategy>("car");
   const [routeSegments, setRouteSegments] = useState<RouteSegment[]>([]);
-  const [routeType, setRouteType] = useState<"car" | "train">("car");
-  const [distance, setDistance] = useState<number | null>(null);
+  const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showMap, setShowMap] = useState(true);
+  const [searchMode, setSearchMode] = useState<"place" | "station">("place");
+  const [transportFilter, setTransportFilter] = useState<"tram" | "train" | "bus" | undefined>(undefined);
+
+  const calculateRoutePreview = useCallback(async () => {
+    if (!origin || !destination) return;
+
+    try {
+      const response = await calculateRoute(origin, destination, strategy, waypoints);
+      if (response.success && response.data) {
+        setRouteResult(response.data);
+        setRouteSegments(response.data.segments);
+      }
+    } catch (err) {
+      console.error("Route preview failed:", err);
+    }
+  }, [origin, destination, strategy, waypoints]);
+
+  useEffect(() => {
+    if (origin && destination) {
+      calculateRoutePreview();
+    }
+  }, [origin, destination, strategy, waypoints, calculateRoutePreview]);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
@@ -33,7 +51,7 @@ export const MapExplorationScreen: React.FC = () => {
       setError(null);
 
       if (searchMode === "station") {
-        const response = await searchStations(searchQuery);
+        const response = await searchStations(searchQuery, 20, transportFilter);
         if (response.success && response.data && response.data.length > 0) {
           setSearchResults(response.data);
         } else {
@@ -42,10 +60,12 @@ export const MapExplorationScreen: React.FC = () => {
       } else {
         const response = await lookupDestination(searchQuery);
         if (response.success && response.data) {
-          if (!startPoint) {
-            setStartPoint({ ...response.data, name: searchQuery });
+          const newPlace = { ...response.data, name: searchQuery };
+
+          if (!origin) {
+            setOrigin(newPlace);
           } else if (!destination) {
-            setDestination({ ...response.data, name: searchQuery });
+            setDestination(newPlace);
           }
           setSearchQuery("");
         } else {
@@ -59,58 +79,53 @@ export const MapExplorationScreen: React.FC = () => {
     }
   };
 
-  const handleSelectStation = (station: {name: string; position: Coordinate}) => {
-    setStations([...stations, station.position]);
-    setStationNames([...stationNames, station.name]);
+  const handleSelectStation = (station: { name: string; position: Coordinate; transportType: string }) => {
+    const newWaypoint: Waypoint = {
+      position: station.position,
+      type: "station",
+      name: station.name,
+      transportType: station.transportType as "tram" | "train" | "bus",
+    };
+
+    const newWaypoints = [...waypoints, newWaypoint];
+    setWaypoints(newWaypoints);
     setSearchResults([]);
     setSearchQuery("");
   };
 
-  const handleCalculateRoute = async () => {
-    if (!startPoint || !destination) {
-      setError("Please enter start point and destination");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await calculateRoute(startPoint, destination, routeType, stations);
-
-      if (response.success && response.data) {
-        setRouteSegments(response.data.segments);
-        setDistance(response.data.totalDistance / 1000);
-      } else {
-        setError(response.error || "Failed to calculate route");
-      }
-    } catch (err: any) {
-      setError(err.message || "Route calculation failed");
-    } finally {
-      setLoading(false);
-    }
+  const handleRemoveWaypoint = (index: number) => {
+    const newWaypoints = waypoints.filter((_, i) => i !== index);
+    setWaypoints(newWaypoints);
   };
 
   const resetForm = () => {
     setSearchQuery("");
-    setStartPoint(null);
+    setOrigin(null);
     setDestination(null);
-    setStations([]);
-    setStationNames([]);
+    setWaypoints([]);
     setSearchResults([]);
     setRouteSegments([]);
-    setDistance(null);
+    setRouteResult(null);
     setError(null);
   };
 
   const getMarkers = () => {
     const result = [];
-    if (startPoint) result.push({ lat: startPoint.lat, lng: startPoint.lng, label: startPoint.name || "Start" });
+    if (origin) result.push({ lat: origin.lat, lng: origin.lng, label: origin.name || "Start" });
     if (destination) result.push({ lat: destination.lat, lng: destination.lng, label: destination.name || "Destination" });
-    stations.forEach((s, i) => result.push({ lat: s.lat, lng: s.lng, label: stationNames[i] || `Station ${i + 1}` }));
+    waypoints.forEach((w, i) => result.push({ lat: w.position.lat, lng: w.position.lng, label: w.name || `Station ${i + 1}` }));
     return result;
   };
 
-  return (    
+  const formatDuration = (seconds: number) => {
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) return `${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours}h ${mins}m`;
+  };
+
+  return (
     <View style={styles.container}>
       {showMap && (
         <View style={{ flex: 1 }}>
@@ -123,130 +138,179 @@ export const MapExplorationScreen: React.FC = () => {
 
       <View style={styles.controlPanel}>
         <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
-        <Text style={styles.title}>Melbourne Navigation</Text>
-        
-        <View style={styles.routeTypeContainer}>
-          <TouchableOpacity
-            style={[styles.routeTypeButton, routeType === "car" && styles.routeTypeActive]}
-            onPress={() => setRouteType("car")}
-          >
-            <Text style={styles.routeTypeText}>Car</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.routeTypeButton, routeType === "train" && styles.routeTypeActive]}
-            onPress={() => setRouteType("train")}
-          >
-            <Text style={styles.routeTypeText}>Train</Text>
-          </TouchableOpacity>
-        </View>
+          <Text style={styles.title}>Melbourne Navigation</Text>
 
-        <View style={styles.searchModeContainer}>
-          <TouchableOpacity
-            style={[styles.modeButton, searchMode === "destination" && styles.modeActive]}
-            onPress={() => setSearchMode("destination")}
-          >
-            <Text style={styles.modeText}>Place</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.modeButton, searchMode === "station" && styles.modeActive]}
-            onPress={() => setSearchMode("station")}
-          >
-            <Text style={styles.modeText}>Station</Text>
-          </TouchableOpacity>
-        </View>
+          <View style={styles.routeTypeContainer}>
+            <TouchableOpacity
+              style={[styles.routeTypeButton, strategy === "car" && styles.routeTypeActive]}
+              onPress={() => setStrategy("car")}
+            >
+              <Text style={styles.routeTypeText}>Car</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.routeTypeButton, strategy === "pt" && styles.routeTypeActive]}
+              onPress={() => setStrategy("pt")}
+            >
+              <Text style={styles.routeTypeText}>PT</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.routeTypeButton, strategy === "park-and-ride" && styles.routeTypeActive]}
+              onPress={() => setStrategy("park-and-ride")}
+            >
+              <Text style={styles.routeTypeText}>Park & Ride</Text>
+            </TouchableOpacity>
+          </View>
 
-        <View style={styles.inputSection}>
-          <TextInput
-            style={styles.input}
-            placeholder={searchMode === "station" ? "Search station..." : "Search place..."}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            editable={!loading}
-          />
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleSearch}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Search</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+          <Text style={{ marginBottom: 8, color: '#666', fontSize: 12 }}>
+            {strategy === "car" && "Driving route only"}
+            {strategy === "pt" && "Public transport only (requires stations)"}
+            {strategy === "park-and-ride" && `Drive to station, then PT: ${waypoints.length} station(s)`}
+          </Text>
 
-        {searchResults.length > 0 && (
-          <View style={styles.resultsContainer}>
-            {searchResults.slice(0, 5).map((result, index) => (
+          <View style={styles.searchModeContainer}>
+            <TouchableOpacity
+              style={[styles.modeButton, searchMode === "place" && styles.modeActive]}
+              onPress={() => setSearchMode("place")}
+            >
+              <Text style={styles.modeText}>Place</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modeButton, searchMode === "station" && styles.modeActive]}
+              onPress={() => setSearchMode("station")}
+            >
+              <Text style={styles.modeText}>Station</Text>
+            </TouchableOpacity>
+          </View>
+
+          {searchMode === "station" && (
+            <View style={styles.searchModeContainer}>
               <TouchableOpacity
-                key={index}
-                style={styles.resultItem}
-                onPress={() => handleSelectStation(result)}
+                style={[styles.modeButton, !transportFilter && styles.modeActive]}
+                onPress={() => setTransportFilter(undefined)}
               >
-                <Text style={styles.resultText}>{result.name}</Text>
+                <Text style={styles.modeText}>All</Text>
               </TouchableOpacity>
-            ))}
+              <TouchableOpacity
+                style={[styles.modeButton, transportFilter === "train" && styles.modeActive]}
+                onPress={() => setTransportFilter("train")}
+              >
+                <Text style={styles.routeTypeText}>Train</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <View style={styles.inputSection}>
+            <TextInput
+              style={styles.input}
+              placeholder={searchMode === "station" ? "Search station..." : "Search place..."}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              editable={!loading}
+            />
+            <TouchableOpacity
+              style={[styles.button, loading && styles.buttonDisabled]}
+              onPress={handleSearch}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>Search</Text>
+              )}
+            </TouchableOpacity>
           </View>
-        )}
 
-        {error && <Text style={styles.error}>{error}</Text>}
+          {searchResults.length > 0 && (
+            <View style={styles.resultsContainer}>
+              {searchResults.slice(0, 5).map((result, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.resultItem}
+                  onPress={() => handleSelectStation(result)}
+                >
+                  <Text style={styles.resultText}>
+                    {result.transportType}: {result.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
 
-        {startPoint && (
-          <View style={styles.resultBox}>
-            <Text style={styles.resultLabel}>Start: {startPoint.name}</Text>
-            <Text style={styles.resultValue}>
-              {startPoint.lat.toFixed(4)}, {startPoint.lng.toFixed(4)}
-            </Text>
+          {error && <Text style={styles.error}>{error}</Text>}
+
+          {origin && (
+            <View style={styles.resultBox}>
+              <Text style={styles.resultLabel}>From: {origin.name}</Text>
+              <Text style={styles.resultValue}>
+                {origin.lat.toFixed(4)}, {origin.lng.toFixed(4)}
+              </Text>
+            </View>
+          )}
+
+          {waypoints.length > 0 && (
+            <View style={styles.resultBox}>
+              <Text style={styles.resultLabel}>Via Stations:</Text>
+              {waypoints.map((w, i) => (
+                <View key={i} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={styles.resultValue}>• {w.transportType}: {w.name}</Text>
+                  <TouchableOpacity onPress={() => handleRemoveWaypoint(i)} style={{ marginLeft: 8 }}>
+                    <Text style={{ color: 'red' }}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {destination && (
+            <View style={styles.resultBox}>
+              <Text style={styles.resultLabel}>To: {destination.name}</Text>
+              <Text style={styles.resultValue}>
+                {destination.lat.toFixed(4)}, {destination.lng.toFixed(4)}
+              </Text>
+            </View>
+          )}
+
+          {routeResult && (
+            <View style={[styles.resultBox, styles.distanceBox]}>
+              <Text style={styles.resultLabel}>Distance:</Text>
+              <Text style={styles.resultValue}>{(routeResult.totalDistance / 1000).toFixed(2)} km</Text>
+              <Text style={styles.resultLabel}>Duration:</Text>
+              <Text style={styles.resultValue}>{formatDuration(routeResult.totalDuration)}</Text>
+              {routeResult.estimatedArrival && (
+                <>
+                  <Text style={styles.resultLabel}>Est. Arrival:</Text>
+                  <Text style={styles.resultValue}>
+                    {new Date(routeResult.estimatedArrival).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                </>
+              )}
+              {routeResult.departureInfo && routeResult.departureInfo.length > 0 && (
+                <>
+                  <Text style={styles.resultLabel}>Next departures:</Text>
+                  {routeResult.departureInfo.map((d, i) => (
+                    <Text key={i} style={styles.resultValue}>
+                      {d.stationName}: {d.waitTimeMinutes} min ({d.nextDeparture})
+                    </Text>
+                  ))}
+                </>
+              )}
+            </View>
+          )}
+
+          <View style={styles.actionButtons}>
+            <TouchableOpacity
+              style={[styles.button, styles.secondaryButton]}
+              onPress={resetForm}
+            >
+              <Text style={styles.buttonText}>Reset</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.button, styles.secondaryButton]}
+              onPress={() => setShowMap(!showMap)}
+            >
+              <Text style={styles.buttonText}>{showMap ? "Hide Map" : "Show Map"}</Text>
+            </TouchableOpacity>
           </View>
-        )}
-
-        {stationNames.length > 0 && (
-          <View style={styles.resultBox}>
-            <Text style={styles.resultLabel}>Via Stations:</Text>
-            {stationNames.map((name, i) => (
-              <Text key={i} style={styles.resultValue}>• {name}</Text>
-            ))}
-          </View>
-        )}
-
-        {destination && (
-          <View style={styles.resultBox}>
-            <Text style={styles.resultLabel}>Destination: {destination.name}</Text>
-            <Text style={styles.resultValue}>
-              {destination.lat.toFixed(4)}, {destination.lng.toFixed(4)}
-            </Text>
-          </View>
-        )}
-
-        {distance !== null && (
-          <View style={[styles.resultBox, styles.distanceBox]}>
-            <Text style={styles.resultLabel}>Distance:</Text>
-            <Text style={styles.resultValue}>{distance.toFixed(2)} km</Text>
-          </View>
-        )}
-
-        <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={[styles.button, styles.secondaryButton]}
-            onPress={resetForm}
-          >
-            <Text style={styles.buttonText}>Reset</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, styles.primaryButton]}
-            onPress={handleCalculateRoute}
-            disabled={!startPoint || !destination}
-          >
-            <Text style={styles.buttonText}>Calculate Route</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, styles.secondaryButton]}
-            onPress={() => setShowMap(!showMap)}
-          >
-            <Text style={styles.buttonText}>{showMap ? "Hide Map" : "Show Map"}</Text>
-          </TouchableOpacity>
-        </View>
         </ScrollView>
       </View>
     </View>
