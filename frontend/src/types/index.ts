@@ -4,12 +4,35 @@ export interface Coordinate {
   name?: string;
 }
 
+export type RouteStrategy = "car" | "pt" | "park-and-ride";
+
+export interface Waypoint {
+  position: Coordinate;
+  type: "station" | "place";
+  name?: string;
+  transportType?: "tram" | "train" | "bus";
+}
+
 export interface RouteSegment {
-  type: "car" | "train";
+  type: "car" | "pt";
   coordinates: number[][];
   color: string;
   distance?: number;
   duration?: number;
+}
+
+export interface RouteResult {
+  segments: RouteSegment[];
+  totalDistance: number;
+  totalDuration: number;
+  estimatedArrival?: string;
+  departureInfo?: DepartureInfo[];
+}
+
+export interface DepartureInfo {
+  stationName: string;
+  nextDeparture: string;
+  waitTimeMinutes: number;
 }
 
 export interface RouteOption {
@@ -28,6 +51,7 @@ export interface Station {
   id: string;
   name: string;
   position: Coordinate;
+  transportType: "tram" | "train" | "bus";
   hasParking: boolean;
   parkingCapacity?: number;
   parkingAvailable?: number;
