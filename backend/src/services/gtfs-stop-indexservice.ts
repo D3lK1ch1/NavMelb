@@ -73,7 +73,7 @@ export function loadGtfsStops(): void {
       continue;
     }
 
-    const csv = entry.getData().toString("utf8");
+    const csv = entry.getData();
     const rows = parse(csv, {
       columns: true,
       skip_empty_lines: true,
