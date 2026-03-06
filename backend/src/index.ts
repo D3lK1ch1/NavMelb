@@ -3,10 +3,12 @@ import cors from "cors";
 import dotenv from "dotenv";
 import mapRoutes from "./routes/route";
 import { loadGtfsStops } from "./services/gtfs-stop-indexservice";
+import { loadGtfsTimetables } from "./services/gtfs-timetable.service";
 
 dotenv.config();
 
 loadGtfsStops();
+loadGtfsTimetables();
 
 const app = express();
 app.use(cors());
