@@ -1,5 +1,5 @@
 import { Coordinate, RouteSegment } from "../types";
-import { findStopCoordinate, getAllStops } from "./gtfs-stop-indexservice";
+import { findStopCoordinate, getAllStops, getStopsByType, TransportType } from "./gtfs-stop-indexservice";
 import axios from "axios";
 import * as turf from "@turf/turf";
 
@@ -22,7 +22,8 @@ function toRad(degrees: number): number {
 }
 
 export function lookupDestination(query: string): Coordinate | null {
-  return findStopCoordinate(query);
+  const result = findStopCoordinate(query);
+  return result ? result.position : null;
 }
 
 export async function osrmRoute(
@@ -64,7 +65,7 @@ export async function osrmRoute(
   }
 }
 
-export function getTrainRoute(
+export function getPTVRoute(
   fromStation: Coordinate,
   toStation: Coordinate
 ): number[][] {
