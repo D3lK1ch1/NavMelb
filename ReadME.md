@@ -32,11 +32,7 @@ Need-to-know: remote error with gtfs folder because of large file size limit. If
 ## Configurations
 * Frontend (Mobile) = React Native - find one good for both Apple and Android
 * Mapping SDK = OSM (using free versions) aka Leaflet too
-* Backend = Node.js + Express (for route calc, data aggregation, parking and PTV API) + GraphQL
--------------------------------------
-* Cloud Infrastructure = AWS / Google Cloud / Azure (host routing services, store user data, ML models) - check which one is free
-* Database = PostgreSQL + PostGIS (Store map data, station info, parking metadata and custom routing logic)
-* AI / ML = TensorFlow Lite(For indoor positioning, walking direction disambiguation) = how to combine TensorFlow to JS?
+* Backend = Node.js + Express (for route calc, data aggregation, parking and PTV API)
 
 ## Constraints
 * Completely in TS/JS, for the web development portion of the works. Other languages must integrate well with JS in the case of databases.
@@ -46,3 +42,7 @@ Tech stack is in work while the navigation app is iteratively integrated, as fea
 
 ## Current Progress
 Not necessarily satisfied with AI integration on the template for my definition to make a multi routing for car and PTV, ranging from problems with unclear button uses, unclear data information about stations, still from starting point and destination without input about station in between ex. Car -> Station -> Destination. Figuring out the problems, learning how to narrow down code to fix this one by one.
+
+The problem still exists, but slowly working together with AI understanding more about the GTFS dataset that can tracks suburbs such as Clayton, Caulfield, etc. but not specific address even when there is a web-app that uses Leaflet map that can specify address, to look further into. Changing distance to time, the map is establishing straight line routes without caring about roads or railways that has the example of 19 minutes rather than the usual hour-ish to get there, or changing train routes considering Metro-City Loop routing. 
+
+Because addresses cannot be used, unsure how to specify car and then train. Still a little unsure. 
