@@ -1,7 +1,10 @@
 import { Router, Request, Response } from "express";
-import { ApiResponse, Coordinate, RouteSegment } from "../types";
-import {calculateDistance, lookupDestination, osrmRoute, getTrainRoute} from "../services/route-map.service";
-import { getAllStops } from "../services/gtfs-stop-indexservice";
+import { ApiResponse, Coordinate, RouteSegment, RouteResult, RouteStrategy, Waypoint } from "../types";
+import {calculateDistance, lookupDestination, osrmRoute, getPTVRoute} from "../services/route-map.service";
+import { getAllStops, getStopsByType, TransportType } from "../services/gtfs-stop-indexservice";
+import { loadGtfsTimetables, findDeparturesForWaypoints } from "../services/gtfs-timetable.service";
+
+loadGtfsTimetables();
 
 const router = Router();
 
@@ -84,7 +87,7 @@ router.post(
 
 router.get("/stations/search", (req: Request, res: Response) => {
   try {
-    const { query, limit } = req.query;
+    const { query, limit, transportType } = req.query;
 
     if (!query) {
       return res.status(400).json({
@@ -94,13 +97,22 @@ router.get("/stations/search", (req: Request, res: Response) => {
       });
     }
 
-    const allStops = getAllStops();
-    const searchTerm = (query as string).toLowerCase();
-    const results = allStops
-      .filter((s) => s.name.toLowerCase().includes(searchTerm))
+    let stops = getAllStops();
+    if (transportType && ["tram", "train", "bus"].includes(transportType as string)) {
+      stops = stops.filter((s) => s.transportType === transportType);
+    }
+
+    const normalizedQuery = (query as string)
+      .toLowerCase()
+      .trim()
+      .replace(/\bstation\b/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const results = stops
+      .filter((s) => s.name.includes(normalizedQuery))
       .slice(0, Number(limit) || 10);
 
-    const response: ApiResponse<{ name: string; position: Coordinate }[]> = {
+    const response: ApiResponse<{ name: string; position: Coordinate; transportType: TransportType }[]> = {
       success: true,
       data: results,
       timestamp: new Date().toISOString(),
@@ -117,12 +129,25 @@ router.get("/stations/search", (req: Request, res: Response) => {
 
 router.post("/route/calculate", async (req: Request, res: Response) => {
   try {
-    const { from, to, viaStations, routeType } = req.body;
+    const { origin, destination, waypoints, strategy } = req.body as {
+      origin: Coordinate;
+      destination: Coordinate;
+      waypoints?: Waypoint[];
+      strategy: RouteStrategy;
+    };
 
-    if (!from || !to || !from.lat || !from.lng || !to.lat || !to.lng) {
+    if (!origin || !destination || !origin.lat || !origin.lng || !destination.lat || !destination.lng) {
       return res.status(400).json({
         success: false,
-        error: "Invalid coordinates. Expected: { from: {lat, lng}, to: {lat, lng} }",
+        error: "Invalid coordinates. Expected: { origin: {lat, lng}, destination: {lat, lng} }",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (!strategy || !["car", "pt", "park-and-ride"].includes(strategy)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid strategy. Must be: 'car', 'pt', or 'park-and-ride'",
         timestamp: new Date().toISOString(),
       });
     }
@@ -131,8 +156,8 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
     let totalDistance = 0;
     let totalDuration = 0;
 
-    if (routeType === "car") {
-      const carRoute = await osrmRoute(from, to);
+    if (strategy === "car") {
+      const carRoute = await osrmRoute(origin, destination, waypoints?.map(w => w.position));
       segments.push({
         type: "car",
         coordinates: carRoute.geometry,
@@ -142,76 +167,114 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       });
       totalDistance = carRoute.distance;
       totalDuration = carRoute.duration;
-    } else if (routeType === "train" && viaStations && viaStations.length >= 2) {
-      let prevStation = from;
-      for (const station of viaStations) {
-        const trainLine = getTrainRoute(prevStation, station);
-        const dist = calculateDistance(prevStation, station);
+    } else if (strategy === "pt") {
+      const allStations = waypoints?.filter(w => w.type === "station") || [];
+      if (allStations.length < 2) {
+        return res.status(400).json({
+          success: false,
+          error: "PT routing requires at least 2 stations as waypoints",
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      let prevPoint = origin;
+      for (const station of allStations) {
+        const ptRoute = getPTVRoute(prevPoint, station.position);
+        const dist = calculateDistance(prevPoint, station.position);
         segments.push({
-          type: "train",
-          coordinates: trainLine,
+          type: "pt",
+          coordinates: ptRoute,
           color: "#F44336",
           distance: dist,
           duration: (dist / 1000 / 60) * 3600,
         });
         totalDistance += dist;
-        prevStation = station;
+        totalDuration += (dist / 1000 / 60) * 3600;
+        prevPoint = station.position;
       }
-      const finalTrain = getTrainRoute(prevStation, to);
-      const finalDist = calculateDistance(prevStation, to);
+
+      const finalRoute = getPTVRoute(prevPoint, destination);
+      const finalDist = calculateDistance(prevPoint, destination);
       segments.push({
-        type: "train",
-        coordinates: finalTrain,
+        type: "pt",
+        coordinates: finalRoute,
         color: "#F44336",
         distance: finalDist,
         duration: (finalDist / 1000 / 60) * 3600,
       });
       totalDistance += finalDist;
-    } else if (routeType === "combined" && viaStations && viaStations.length > 0) {
-      let currentPos = from;
-      for (const station of viaStations) {
-        const carRoute = await osrmRoute(currentPos, station);
-        segments.push({
-          type: "car",
-          coordinates: carRoute.geometry,
-          color: "#2196F3",
-          distance: carRoute.distance,
-          duration: carRoute.duration,
+      totalDuration += (finalDist / 1000 / 60) * 3600;
+    } else if (strategy === "park-and-ride") {
+      const stations = waypoints?.filter(w => w.type === "station") || [];
+      if (stations.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: "Park-and-ride requires at least one station as waypoint",
+          timestamp: new Date().toISOString(),
         });
-        totalDistance += carRoute.distance;
-        totalDuration += carRoute.duration;
-        currentPos = station;
       }
-      const finalCarRoute = await osrmRoute(currentPos, to);
+
+      let currentPos = origin;
+
+      const carToFirst = await osrmRoute(currentPos, stations[0].position);
       segments.push({
         type: "car",
-        coordinates: finalCarRoute.geometry,
+        coordinates: carToFirst.geometry,
         color: "#2196F3",
-        distance: finalCarRoute.distance,
-        duration: finalCarRoute.duration,
+        distance: carToFirst.distance,
+        duration: carToFirst.duration,
       });
-      totalDistance += finalCarRoute.distance;
-      totalDuration += finalCarRoute.duration;
-    } else {
-      const carRoute = await osrmRoute(from, to);
+      totalDistance += carToFirst.distance;
+      totalDuration += carToFirst.duration;
+      currentPos = stations[0].position;
+
+      for (let i = 0; i < stations.length - 1; i++) {
+        const fromStation = stations[i];
+        const toStation = stations[i + 1];
+        const ptRoute = getPTVRoute(fromStation.position, toStation.position);
+        const dist = calculateDistance(fromStation.position, toStation.position);
+        segments.push({
+          type: "pt",
+          coordinates: ptRoute,
+          color: "#F44336",
+          distance: dist,
+          duration: (dist / 1000 / 60) * 3600,
+        });
+        totalDistance += dist;
+        totalDuration += (dist / 1000 / 60) * 3600;
+        currentPos = toStation.position;
+      }
+
+      const finalRoute = getPTVRoute(currentPos, destination);
+      const finalDist = calculateDistance(currentPos, destination);
       segments.push({
-        type: "car",
-        coordinates: carRoute.geometry,
-        color: "#2196F3",
-        distance: carRoute.distance,
-        duration: carRoute.duration,
+        type: "pt",
+        coordinates: finalRoute,
+        color: "#F44336",
+        distance: finalDist,
+        duration: (finalDist / 1000 / 60) * 3600,
       });
-      totalDistance = carRoute.distance;
-      totalDuration = carRoute.duration;
+      totalDistance += finalDist;
+      totalDuration += (finalDist / 1000 / 60) * 3600;
     }
 
-    const response: ApiResponse<{
-      segments: RouteSegment[];
-      totalDistance: number;
-      totalDuration: number;
-    }> = {
+    const departureInfo = strategy !== "car" 
+      ? findDeparturesForWaypoints(waypoints || [])
+      : undefined;
+
+    const arrivalTime = new Date(Date.now() + totalDuration * 1000);
+
+    const result: RouteResult = {
+      segments,
+      totalDistance,
+      totalDuration,
+      estimatedArrival: arrivalTime.toISOString(),
+      departureInfo: departureInfo?.length ? departureInfo : undefined,
+    };
+
+    const response: ApiResponse<RouteResult> = {
       success: true,
-      data: { segments, totalDistance, totalDuration },
+      data: result,
       timestamp: new Date().toISOString(),
     };
     res.json(response);
