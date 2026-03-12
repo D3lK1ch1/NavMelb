@@ -25,3 +25,5 @@ yarn-error.log*
 # Mobile app builds
 .android/
 .ios/
+# For the large GTFS data files
+/gtfs/
