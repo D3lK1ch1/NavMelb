@@ -14,10 +14,29 @@ export type TransportType = "tram" | "train" | "bus";
 
 export interface StopEntry {
   position: Coordinate;
-  transportType: TransportType;
+  transportTypes: Set<TransportType>;
 }
 
 const stopIndex = new Map<string, StopEntry>();
+const proximityMergeMeters = 150;
+
+function toRad(degrees: number): number {
+  return (degrees * Math.PI) / 180;
+}
+
+function distanceMeters(coord1: Coordinate, coord2: Coordinate): number {
+  const R = 6371;
+  const dLat = toRad(coord2.lat - coord1.lat);
+  const dLng = toRad(coord2.lng - coord1.lng);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(coord1.lat)) *
+      Math.cos(toRad(coord2.lat)) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c * 1000;
+}
 
 function normalizeName(value: string): string {
   return value
@@ -91,33 +110,42 @@ export function loadGtfsStops(): void {
 
       const existing = stopIndex.get(name);
       if (!existing) {
-        stopIndex.set(name, { position: { lat, lng }, transportType });
-      } else if (existing.transportType === "bus" && transportType !== "bus") {
-        stopIndex.set(name, { position: { lat, lng }, transportType });
+        stopIndex.set(name, { position: { lat, lng }, transportTypes: new Set([transportType]) });
+      } else {
+        existing.transportTypes.add(transportType);
+        const dist = distanceMeters(existing.position, { lat, lng });
+        if (dist <= proximityMergeMeters) {
+          existing.position = {
+            lat: (existing.position.lat + lat) / 2,
+            lng: (existing.position.lng + lng) / 2,
+          };
+        }
       }
     }
   }
 }
 
-export function findStopCoordinate(query: string): { position: Coordinate; transportType: TransportType } | null {
+export function findStopCoordinate(query: string): { position: Coordinate; transportTypes: TransportType[] } | null {
   const key = normalizeName(query);
-  return stopIndex.get(key) || null;
+  const entry = stopIndex.get(key);
+  if (!entry) return null;
+  return { position: entry.position, transportTypes: Array.from(entry.transportTypes).sort() };
 }
 
 export interface StopInfo {
   name: string;
   position: Coordinate;
-  transportType: TransportType;
+  transportTypes: TransportType[];
 }
 
 export function getAllStops(): StopInfo[] {
   const stops: StopInfo[] = [];
   stopIndex.forEach((entry, name) => {
-    stops.push({ name, position: entry.position, transportType: entry.transportType });
+    stops.push({ name, position: entry.position, transportTypes: Array.from(entry.transportTypes).sort() });
   });
   return stops.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function getStopsByType(type: TransportType): StopInfo[] {
-  return getAllStops().filter((s) => s.transportType === type);
+  return getAllStops().filter((s) => s.transportTypes.includes(type));
 }
