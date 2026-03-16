@@ -4,7 +4,7 @@ export interface Coordinate {
   name?: string;
 }
 
-export type RouteStrategy = "car" | "pt" | "park-and-ride";
+export type RouteStrategy = "car" | "ptv" | "park-and-ride";
 
 export interface Waypoint {
   position: Coordinate;
@@ -14,7 +14,7 @@ export interface Waypoint {
 }
 
 export interface RouteSegment {
-  type: "car" | "pt";
+  type: "car" | "ptv";
   coordinates: number[][];
   color: string;
   distance?: number;

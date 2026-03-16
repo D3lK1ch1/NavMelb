@@ -144,10 +144,10 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       });
     }
 
-    if (!strategy || !["car", "pt", "park-and-ride"].includes(strategy)) {
+    if (!strategy || !["car", "ptv", "park-and-ride"].includes(strategy)) {
       return res.status(400).json({
         success: false,
-        error: "Invalid strategy. Must be: 'car', 'pt', or 'park-and-ride'",
+        error: "Invalid strategy. Must be: 'car', 'ptv', or 'park-and-ride'",
         timestamp: new Date().toISOString(),
       });
     }
@@ -167,12 +167,12 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       });
       totalDistance = carRoute.distance;
       totalDuration = carRoute.duration;
-    } else if (strategy === "pt") {
+    } else if (strategy === "ptv") {
       const allStations = waypoints?.filter(w => w.type === "station") || [];
       if (allStations.length < 2) {
         return res.status(400).json({
           success: false,
-          error: "PT routing requires at least 2 stations as waypoints",
+          error: "PTV routing requires at least 2 stations as waypoints",
           timestamp: new Date().toISOString(),
         });
       }
@@ -182,7 +182,7 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
         const ptRoute = getPTVRoute(prevPoint, station.position);
         const dist = calculateDistance(prevPoint, station.position);
         segments.push({
-          type: "pt",
+          type: "ptv",
           coordinates: ptRoute,
           color: "#F44336",
           distance: dist,
@@ -196,7 +196,7 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       const finalRoute = getPTVRoute(prevPoint, destination);
       const finalDist = calculateDistance(prevPoint, destination);
       segments.push({
-        type: "pt",
+        type: "ptv",
         coordinates: finalRoute,
         color: "#F44336",
         distance: finalDist,
@@ -234,7 +234,7 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
         const ptRoute = getPTVRoute(fromStation.position, toStation.position);
         const dist = calculateDistance(fromStation.position, toStation.position);
         segments.push({
-          type: "pt",
+          type: "ptv",
           coordinates: ptRoute,
           color: "#F44336",
           distance: dist,
@@ -248,7 +248,7 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       const finalRoute = getPTVRoute(currentPos, destination);
       const finalDist = calculateDistance(currentPos, destination);
       segments.push({
-        type: "pt",
+        type: "ptv",
         coordinates: finalRoute,
         color: "#F44336",
         distance: finalDist,
