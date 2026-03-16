@@ -1,14 +1,14 @@
 import { Router, Request, Response } from "express";
 import { ApiResponse, Coordinate, RouteSegment, RouteResult, RouteStrategy, Waypoint } from "../types";
-import {calculateDistance, lookupDestination, osrmRoute, getPTVRoute} from "../services/route-map.service";
-import { getAllStops, getStopsByType, TransportType } from "../services/gtfs-stop-indexservice";
+import {calculateDistance, lookupDestinationAny, osrmRoute, getPTVRoute} from "../services/route-map.service";
+import { getAllStops, TransportType } from "../services/gtfs-stop-indexservice";
 import { loadGtfsTimetables, findDeparturesForWaypoints } from "../services/gtfs-timetable.service";
 
 loadGtfsTimetables();
 
 const router = Router();
 
-router.get("/destination/lookup", (req: Request, res: Response) => {
+router.get("/destination/lookup", async (req: Request, res: Response) => {
   try {
     const { query } = req.query;
 
@@ -20,7 +20,7 @@ router.get("/destination/lookup", (req: Request, res: Response) => {
       });
     }
 
-    const coordinates = lookupDestination(query as string);
+    const coordinates = await lookupDestinationAny(query as string);
 
     if (!coordinates) {
       return res.status(404).json({
@@ -99,7 +99,7 @@ router.get("/stations/search", (req: Request, res: Response) => {
 
     let stops = getAllStops();
     if (transportType && ["tram", "train", "bus"].includes(transportType as string)) {
-      stops = stops.filter((s) => s.transportType === transportType);
+      stops = stops.filter((s) => s.transportTypes.includes(transportType as TransportType));
     }
 
     const normalizedQuery = (query as string)
@@ -112,7 +112,7 @@ router.get("/stations/search", (req: Request, res: Response) => {
       .filter((s) => s.name.includes(normalizedQuery))
       .slice(0, Number(limit) || 10);
 
-    const response: ApiResponse<{ name: string; position: Coordinate; transportType: TransportType }[]> = {
+    const response: ApiResponse<{ name: string; position: Coordinate; transportTypes: TransportType[] }[]> = {
       success: true,
       data: results,
       timestamp: new Date().toISOString(),
