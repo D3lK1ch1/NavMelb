@@ -1,5 +1,6 @@
 import { Coordinate, RouteSegment } from "../types";
-import { findStopCoordinate, getAllStops, getStopsByType, TransportType } from "./gtfs-stop-indexservice";
+import { findStopCoordinate } from "./gtfs-stop-indexservice";
+import { geocodeAddress } from "./geocoding.service";
 import axios from "axios";
 import * as turf from "@turf/turf";
 
@@ -24,6 +25,12 @@ function toRad(degrees: number): number {
 export function lookupDestination(query: string): Coordinate | null {
   const result = findStopCoordinate(query);
   return result ? result.position : null;
+}
+
+export async function lookupDestinationAny(query: string): Promise<Coordinate | null> {
+  const stop = findStopCoordinate(query);
+  if (stop) return stop.position;
+  return await geocodeAddress(query);
 }
 
 export async function osrmRoute(
