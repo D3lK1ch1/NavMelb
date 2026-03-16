@@ -1,5 +1,5 @@
 import axios from "axios";
-import { RouteSegment, Coordinate, Waypoint, RouteStrategy, RouteResult } from "../types";
+import { ApiResponse, Coordinate, Waypoint, RouteStrategy, RouteResult } from "../types";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
@@ -55,9 +55,9 @@ export async function calculateRoute(
   destination: Coordinate,
   strategy: RouteStrategy,
   waypoints?: Waypoint[]
-) {
+): Promise<ApiResponse<RouteResult>> {
   try {
-    const response = await api.post<{ success: boolean; data?: RouteResult }>("/route/calculate", {
+    const response = await api.post<ApiResponse<RouteResult>>("/route/calculate", {
       origin,
       destination,
       waypoints,

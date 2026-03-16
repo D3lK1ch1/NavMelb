@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, ScrollView } from "react-native";
 import * as Location from "expo-location";
 import { lookupDestination, searchStations, calculateRoute } from "../services/api";
-import { Coordinate, Waypoint, RouteSegment, RouteStrategy, RouteResult, TransportType } from "../types";
+import { ApiResponse, Coordinate, Waypoint, RouteSegment, RouteStrategy, RouteResult, TransportType } from "../types";
 import MapComponent from "../components/MapComponent";
 import { mapExplorationStyles as styles } from "../styles/mapExploration";
 
@@ -48,13 +48,34 @@ export const MapExplorationScreen: React.FC = () => {
     if (!origin || !destination) return;
 
     try {
-      const response = await calculateRoute(origin, destination, strategy, waypoints);
+      const stationCount = waypoints.filter((w) => w.type === "station").length;
+      if (strategy === "ptv" && stationCount < 2) {
+        setRouteResult(null);
+        setRouteSegments([]);
+        setError("PTV routing requires at least 2 station waypoints (use Station search to add them).");
+        return;
+      }
+      if (strategy === "park-and-ride" && stationCount < 1) {
+        setRouteResult(null);
+        setRouteSegments([]);
+        setError("Park & Ride requires at least 1 station waypoint (use Station search to add one).");
+        return;
+      }
+
+      const response: ApiResponse<RouteResult> = await calculateRoute(origin, destination, strategy, waypoints);
       if (response.success && response.data) {
         setRouteResult(response.data);
         setRouteSegments(response.data.segments);
+        setError(null);
+      } else if (!response.success) {
+        setError(response.error || "Route calculation failed");
       }
     } catch (err) {
-      console.error("Route preview failed:", err);
+      const message =
+        (err as any)?.response?.data?.error ||
+        (err as any)?.message ||
+        "Route preview failed";
+      setError(message);
     }
   }, [origin, destination, strategy, waypoints]);
 
@@ -169,7 +190,7 @@ export const MapExplorationScreen: React.FC = () => {
 
       <View style={styles.controlPanel}>
         <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
-          <Text style={styles.title}>Melbourne Navigation</Text>
+          <Text style={styles.title}>NavMelb</Text>
 
           <View style={styles.routeTypeContainer}>
             <TouchableOpacity
@@ -212,23 +233,6 @@ export const MapExplorationScreen: React.FC = () => {
               <Text style={styles.modeText}>Station</Text>
             </TouchableOpacity>
           </View>
-
-          {searchMode === "station" && (
-            <View style={styles.searchModeContainer}>
-              <TouchableOpacity
-                style={[styles.modeButton, !transportFilter && styles.modeActive]}
-                onPress={() => setTransportFilter(undefined)}
-              >
-                <Text style={styles.modeText}>All</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modeButton, transportFilter === "train" && styles.modeActive]}
-                onPress={() => setTransportFilter("train")}
-              >
-                <Text style={styles.routeTypeText}>Train</Text>
-              </TouchableOpacity>
-            </View>
-          )}
 
           <View style={styles.inputSection}>
             <TextInput
