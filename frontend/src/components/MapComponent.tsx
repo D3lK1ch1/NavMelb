@@ -10,6 +10,7 @@ type MapComponentProps = {
   markers?: Marker[];
   waypoints?: Marker[];
   routeSegments?: RouteSegment[];
+  onMapClick?: (coord: { lat: number; lng: number }) => void;
 };
 
 export default function MapComponent({
@@ -18,6 +19,7 @@ export default function MapComponent({
   markers = [],
   waypoints = [],
   routeSegments = [],
+  onMapClick,
 }: MapComponentProps) {
   const webViewRef = useRef<WebView>(null);
 
@@ -137,6 +139,13 @@ export default function MapComponent({
 
   document.addEventListener('message', handleMessage);
   window.addEventListener('message', handleMessage);
+
+  map.on('click', function(e) {
+    const payload = JSON.stringify({ type: 'mapClick', lat: e.latlng.lat, lng: e.latlng.lng });
+    if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+      window.ReactNativeWebView.postMessage(payload);
+    }
+  });
 </script>
 </body>
 </html>
@@ -177,7 +186,9 @@ export default function MapComponent({
         onMessage={(event) => {
           try {
             const data = JSON.parse(event.nativeEvent.data);
-            console.log("Map event:", data);
+            if (data?.type === "mapClick" && typeof data.lat === "number" && typeof data.lng === "number") {
+              onMapClick?.({ lat: data.lat, lng: data.lng });
+            }
           } catch (e) {
             console.error("Failed to parse map event:", e);
           }

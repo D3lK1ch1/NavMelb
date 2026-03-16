@@ -1,16 +1,19 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, ScrollView } from "react-native";
+import * as Location from "expo-location";
 import { lookupDestination, searchStations, calculateRoute } from "../services/api";
-import { Coordinate, Waypoint, RouteSegment, RouteStrategy, RouteResult } from "../types";
+import { Coordinate, Waypoint, RouteSegment, RouteStrategy, RouteResult, TransportType } from "../types";
 import MapComponent from "../components/MapComponent";
 import { mapExplorationStyles as styles } from "../styles/mapExploration";
+
+type StationSearchResult = { name: string; position: Coordinate; transportTypes: TransportType[] };
 
 export const MapExplorationScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [origin, setOrigin] = useState<Coordinate | null>(null);
   const [destination, setDestination] = useState<Coordinate | null>(null);
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
-  const [searchResults, setSearchResults] = useState<{ name: string; position: Coordinate; transportType: string }[]>([]);
+  const [searchResults, setSearchResults] = useState<StationSearchResult[]>([]);
   const [strategy, setStrategy] = useState<RouteStrategy>("car");
   const [routeSegments, setRouteSegments] = useState<RouteSegment[]>([]);
   const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
@@ -19,6 +22,27 @@ export const MapExplorationScreen: React.FC = () => {
   const [showMap, setShowMap] = useState(true);
   const [searchMode, setSearchMode] = useState<"place" | "station">("place");
   const [transportFilter, setTransportFilter] = useState<"tram" | "train" | "bus" | undefined>(undefined);
+
+  const handleUseMyLocation = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setError("Location permission denied");
+        return;
+      }
+
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const coord: Coordinate = { lat: pos.coords.latitude, lng: pos.coords.longitude, name: "My Location" };
+      setOrigin(coord);
+      setShowMap(true);
+    } catch (err: any) {
+      setError(err?.message || "Failed to get location");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const calculateRoutePreview = useCallback(async () => {
     if (!origin || !destination) return;
@@ -79,12 +103,12 @@ export const MapExplorationScreen: React.FC = () => {
     }
   };
 
-  const handleSelectStation = (station: { name: string; position: Coordinate; transportType: string }) => {
+  const handleSelectStation = (station: StationSearchResult) => {
     const newWaypoint: Waypoint = {
       position: station.position,
       type: "station",
       name: station.name,
-      transportType: station.transportType as "tram" | "train" | "bus",
+      transportTypes: station.transportTypes,
     };
 
     const newWaypoints = [...waypoints, newWaypoint];
@@ -132,6 +156,13 @@ export const MapExplorationScreen: React.FC = () => {
           <MapComponent
             markers={getMarkers()}
             routeSegments={routeSegments}
+            onMapClick={({ lat, lng }) => {
+              const picked: Coordinate = { lat, lng, name: "Picked" };
+              if (!origin) setOrigin(picked);
+              else if (!destination) setDestination(picked);
+              else setDestination(picked);
+              setShowMap(true);
+            }}
           />
         </View>
       )}
@@ -229,7 +260,7 @@ export const MapExplorationScreen: React.FC = () => {
                   onPress={() => handleSelectStation(result)}
                 >
                   <Text style={styles.resultText}>
-                    {result.transportType}: {result.name}
+                    {result.transportTypes.join(",")}: {result.name}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -252,7 +283,7 @@ export const MapExplorationScreen: React.FC = () => {
               <Text style={styles.resultLabel}>Via Stations:</Text>
               {waypoints.map((w, i) => (
                 <View key={i} style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={styles.resultValue}>• {w.transportType}: {w.name}</Text>
+                  <Text style={styles.resultValue}>• {(w.transportTypes || []).join(",")}: {w.name}</Text>
                   <TouchableOpacity onPress={() => handleRemoveWaypoint(i)} style={{ marginLeft: 8 }}>
                     <Text style={{ color: 'red' }}>✕</Text>
                   </TouchableOpacity>
@@ -303,6 +334,13 @@ export const MapExplorationScreen: React.FC = () => {
               onPress={resetForm}
             >
               <Text style={styles.buttonText}>Reset</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.button, styles.secondaryButton]}
+              onPress={handleUseMyLocation}
+              disabled={loading}
+            >
+              <Text style={styles.buttonText}>Use My Location</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.button, styles.secondaryButton]}
