@@ -148,10 +148,10 @@ export const MapExplorationScreen: React.FC = () => {
               <Text style={styles.routeTypeText}>Car</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.routeTypeButton, strategy === "pt" && styles.routeTypeActive]}
-              onPress={() => setStrategy("pt")}
+              style={[styles.routeTypeButton, strategy === "ptv" && styles.routeTypeActive]}
+              onPress={() => setStrategy("ptv")}
             >
-              <Text style={styles.routeTypeText}>PT</Text>
+              <Text style={styles.routeTypeText}>PTV</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.routeTypeButton, strategy === "park-and-ride" && styles.routeTypeActive]}
@@ -163,8 +163,8 @@ export const MapExplorationScreen: React.FC = () => {
 
           <Text style={{ marginBottom: 8, color: '#666', fontSize: 12 }}>
             {strategy === "car" && "Driving route only"}
-            {strategy === "pt" && "Public transport only (requires stations)"}
-            {strategy === "park-and-ride" && `Drive to station, then PT: ${waypoints.length} station(s)`}
+            {strategy === "ptv" && "Public transport only (requires stations)"}
+            {strategy === "park-and-ride" && `Drive to station, then PTV: ${waypoints.length} station(s)`}
           </Text>
 
           <View style={styles.searchModeContainer}>
