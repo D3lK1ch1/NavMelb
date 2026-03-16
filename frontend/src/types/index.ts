@@ -6,11 +6,13 @@ export interface Coordinate {
 
 export type RouteStrategy = "car" | "ptv" | "park-and-ride";
 
+export type TransportType = "tram" | "train" | "bus";
+
 export interface Waypoint {
   position: Coordinate;
   type: "station" | "place";
   name?: string;
-  transportType?: "tram" | "train" | "bus";
+  transportTypes?: TransportType[];
 }
 
 export interface RouteSegment {
@@ -51,7 +53,7 @@ export interface Station {
   id: string;
   name: string;
   position: Coordinate;
-  transportType: "tram" | "train" | "bus";
+  transportType: TransportType;
   hasParking: boolean;
   parkingCapacity?: number;
   parkingAvailable?: number;
