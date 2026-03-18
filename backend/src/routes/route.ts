@@ -2,9 +2,7 @@ import { Router, Request, Response } from "express";
 import { ApiResponse, Coordinate, RouteSegment, RouteResult, RouteStrategy, Waypoint } from "../types";
 import {calculateDistance, lookupDestinationAny, osrmRoute, getPTVRoute} from "../services/route-map.service";
 import { getAllStops, TransportType } from "../services/gtfs-stop-indexservice";
-import { loadGtfsTimetables, findDeparturesForWaypoints } from "../services/gtfs-timetable.service";
-
-loadGtfsTimetables();
+import { findDeparturesForWaypoints } from "../services/gtfs-timetable.service";
 
 const router = Router();
 
@@ -178,32 +176,39 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       }
 
       let prevPoint = origin;
+      let prevStationName: string | undefined;
       for (const station of allStations) {
-        const ptRoute = getPTVRoute(prevPoint, station.position);
+        const ptRoute = getPTVRoute(
+          prevPoint, 
+          station.position,
+          prevStationName,
+          station.name
+        );
         const dist = calculateDistance(prevPoint, station.position);
         segments.push({
           type: "ptv",
-          coordinates: ptRoute,
+          coordinates: ptRoute.geometry,
           color: "#F44336",
           distance: dist,
-          duration: (dist / 1000 / 60) * 3600,
+          duration: ptRoute.duration,
         });
         totalDistance += dist;
-        totalDuration += (dist / 1000 / 60) * 3600;
+        totalDuration += ptRoute.duration;
         prevPoint = station.position;
+        prevStationName = station.name;
       }
 
-      const finalRoute = getPTVRoute(prevPoint, destination);
+      const finalRoute = getPTVRoute(prevPoint, destination, prevStationName);
       const finalDist = calculateDistance(prevPoint, destination);
       segments.push({
         type: "ptv",
-        coordinates: finalRoute,
+        coordinates: finalRoute.geometry,
         color: "#F44336",
         distance: finalDist,
-        duration: (finalDist / 1000 / 60) * 3600,
+        duration: finalRoute.duration,
       });
       totalDistance += finalDist;
-      totalDuration += (finalDist / 1000 / 60) * 3600;
+      totalDuration += finalRoute.duration;
     } else if (strategy === "park-and-ride") {
       const stations = waypoints?.filter(w => w.type === "station") || [];
       if (stations.length === 0) {
@@ -231,17 +236,22 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       for (let i = 0; i < stations.length - 1; i++) {
         const fromStation = stations[i];
         const toStation = stations[i + 1];
-        const ptRoute = getPTVRoute(fromStation.position, toStation.position);
+        const ptRoute = getPTVRoute(
+          fromStation.position, 
+          toStation.position,
+          fromStation.name,
+          toStation.name
+        );
         const dist = calculateDistance(fromStation.position, toStation.position);
         segments.push({
           type: "ptv",
-          coordinates: ptRoute,
+          coordinates: ptRoute.geometry,
           color: "#F44336",
           distance: dist,
-          duration: (dist / 1000 / 60) * 3600,
+          duration: ptRoute.duration,
         });
         totalDistance += dist;
-        totalDuration += (dist / 1000 / 60) * 3600;
+        totalDuration += ptRoute.duration;
         currentPos = toStation.position;
       }
 
@@ -249,13 +259,13 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       const finalDist = calculateDistance(currentPos, destination);
       segments.push({
         type: "ptv",
-        coordinates: finalRoute,
+        coordinates: finalRoute.geometry,
         color: "#F44336",
         distance: finalDist,
-        duration: (finalDist / 1000 / 60) * 3600,
+        duration: finalRoute.duration,
       });
       totalDistance += finalDist;
-      totalDuration += (finalDist / 1000 / 60) * 3600;
+      totalDuration += finalRoute.duration;
     }
 
     const departureInfo = strategy !== "car" 
