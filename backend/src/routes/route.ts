@@ -110,7 +110,7 @@ router.get("/stations/search", (req: Request, res: Response) => {
       .trim();
     const results = stops
       .filter((s) => s.name.includes(normalizedQuery))
-      .slice(0, Number(limit) || 10);
+      .slice(0, Number(limit) || 50);
 
     const response: ApiResponse<{ name: string; position: Coordinate; transportTypes: TransportType[] }[]> = {
       success: true,

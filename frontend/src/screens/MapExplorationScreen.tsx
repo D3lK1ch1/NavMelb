@@ -96,7 +96,7 @@ export const MapExplorationScreen: React.FC = () => {
       setError(null);
 
       if (searchMode === "station") {
-        const response = await searchStations(searchQuery, 20, transportFilter);
+        const response = await searchStations(searchQuery, 100, transportFilter);
         if (response.success && response.data && response.data.length > 0) {
           setSearchResults(response.data);
         } else {
@@ -256,8 +256,8 @@ export const MapExplorationScreen: React.FC = () => {
           </View>
 
           {searchResults.length > 0 && (
-            <View style={styles.resultsContainer}>
-              {searchResults.slice(0, 5).map((result, index) => (
+            <ScrollView style={styles.resultsContainer} nestedScrollEnabled>
+              {searchResults.map((result, index) => (
                 <TouchableOpacity
                   key={index}
                   style={styles.resultItem}
@@ -268,7 +268,7 @@ export const MapExplorationScreen: React.FC = () => {
                   </Text>
                 </TouchableOpacity>
               ))}
-            </View>
+            </ScrollView>
           )}
 
           {error && <Text style={styles.error}>{error}</Text>}

@@ -19,6 +19,7 @@ export interface StopEntry {
 
 const stopIndex = new Map<string, StopEntry>();
 const proximityMergeMeters = 150;
+let cachedStops: StopInfo[] | null = null;
 
 function toRad(degrees: number): number {
   return (degrees * Math.PI) / 180;
@@ -77,6 +78,7 @@ export function loadGtfsStops(): void {
     .map((d) => d.name);
 
   stopIndex.clear();
+  cachedStops = null;
 
   for (const feedDir of feedDirs) {
     const zipPath = path.join(absoluteRoot, feedDir, "google_transit.zip");
@@ -139,11 +141,14 @@ export interface StopInfo {
 }
 
 export function getAllStops(): StopInfo[] {
+  if (cachedStops) return cachedStops;
+
   const stops: StopInfo[] = [];
   stopIndex.forEach((entry, name) => {
     stops.push({ name, position: entry.position, transportTypes: Array.from(entry.transportTypes).sort() });
   });
-  return stops.sort((a, b) => a.name.localeCompare(b.name));
+  cachedStops = stops.sort((a, b) => a.name.localeCompare(b.name));
+  return cachedStops;
 }
 
 export function getStopsByType(type: TransportType): StopInfo[] {

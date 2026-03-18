@@ -146,6 +146,7 @@ export const mapExplorationStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#ddd",
     overflow: "hidden",
+    maxHeight: 200,
   },
   resultItem: {
     padding: 12,
