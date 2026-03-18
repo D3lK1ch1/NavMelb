@@ -41,6 +41,9 @@ export async function geocodeAddress(query: string): Promise<Coordinate | null> 
         format: "json",
         addressdetails: 0,
         limit: 1,
+        countrycodes: "au",
+        viewbox: "144.5,-37.5,145.5,-37.5",
+        bounded: 1,
       },
       headers: {
         "User-Agent": getUserAgent(),
