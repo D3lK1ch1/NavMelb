@@ -1,6 +1,7 @@
 import { Coordinate, RouteSegment } from "../types";
 import { findStopCoordinate } from "./gtfs-stop-indexservice";
 import { geocodeAddress } from "./geocoding.service";
+import { getTripBetweenStations, stopIdToCoordinate } from "./gtfs-timetable.service";
 import axios from "axios";
 import * as turf from "@turf/turf";
 
@@ -74,12 +75,37 @@ export async function osrmRoute(
 
 export function getPTVRoute(
   fromStation: Coordinate,
-  toStation: Coordinate
-): number[][] {
-  return [
-    [fromStation.lat, fromStation.lng],
-    [toStation.lat, toStation.lng],
-  ];
+  toStation: Coordinate,
+  fromStationName?: string,
+  toStationName?: string
+): { geometry: number[][]; duration: number } {
+  if (fromStationName && toStationName) {
+    const trip = getTripBetweenStations(fromStationName, toStationName);
+    if (trip && trip.stopSequence.length > 0) {
+      const geometry: number[][] = [];
+      for (const stop of trip.stopSequence) {
+        const coord = stopIdToCoordinate.get(stop.stopId);
+        if (coord) {
+          geometry.push([coord.lat, coord.lng]);
+        }
+      }
+
+      const [fromH, fromM, fromS] = trip.departureTime.split(':').map(Number);
+      const [toH, toM, toS] = trip.arrivalTime.split(':').map(Number);
+      const duration = (toH * 3600 + toM * 60 + toS) - (fromH * 3600 + fromM * 60 + fromS);
+
+      if (geometry.length >= 2 && duration > 0) {
+        return { geometry, duration };
+      }
+    }
+  }
+
+  const distance = calculateDistance(fromStation, toStation);
+  const fallbackDuration = (distance / 1000 / 60) * 3600;
+  return {
+    geometry: [[fromStation.lat, fromStation.lng], [toStation.lat, toStation.lng]],
+    duration: fallbackDuration,
+  };
 }
 
 export async function calculateMultiStopRoute(

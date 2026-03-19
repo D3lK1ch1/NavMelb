@@ -255,7 +255,7 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
         currentPos = toStation.position;
       }
 
-      const finalRoute = getPTVRoute(currentPos, destination);
+      const finalRoute = getPTVRoute(currentPos, destination, stations[stations.length - 1].name);
       const finalDist = calculateDistance(currentPos, destination);
       segments.push({
         type: "ptv",
