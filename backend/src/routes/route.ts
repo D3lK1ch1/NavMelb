@@ -3,6 +3,7 @@ import { ApiResponse, Coordinate, RouteSegment, RouteResult, RouteStrategy, Wayp
 import {calculateDistance, lookupDestinationAny, osrmRoute, getPTVRoute} from "../services/route-map.service";
 import { getAllStops, TransportType } from "../services/gtfs-stop-indexservice";
 import { findDeparturesForWaypoints } from "../services/gtfs-timetable.service";
+import { searchStreets, nearbyStreets } from "../services/street-data.service";
 
 const router = Router();
 
@@ -292,6 +293,66 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: "Failed to calculate route",
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+router.get("/streets/search", (req: Request, res: Response) => {
+  try {
+    const { query, limit } = req.query;
+
+    if (!query) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing query parameter",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const results = searchStreets(query as string, Number(limit) || 20);
+
+    res.json({
+      success: true,
+      data: results,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to search streets",
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+router.get("/streets/nearby", (req: Request, res: Response) => {
+  try {
+    const { lat, lng, radius, limit } = req.query;
+
+    if (!lat || !lng) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing lat and lng parameters",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const results = nearbyStreets(
+      { lat: Number(lat), lng: Number(lng) },
+      Number(radius) || 200,
+      Number(limit) || 20,
+    );
+
+    res.json({
+      success: true,
+      data: results,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to find nearby streets",
       timestamp: new Date().toISOString(),
     });
   }
