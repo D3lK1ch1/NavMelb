@@ -4,3 +4,16 @@ node_modules/
 
 # GTFS data files (large, downloaded separately)
 gtfs/
+
+#Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+#Expo
+.expo/
+.expo-shared/
+
+#Environment variables
+.env
+.env.*
