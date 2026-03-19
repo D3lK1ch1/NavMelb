@@ -74,12 +74,18 @@ export async function osrmRoute(
 
 export function getPTVRoute(
   fromStation: Coordinate,
-  toStation: Coordinate
-): number[][] {
-  return [
+  toStation: Coordinate,
+  _fromName?: string,
+  _toName?: string
+): { geometry: number[][]; duration: number } {
+  const geometry = [
     [fromStation.lat, fromStation.lng],
     [toStation.lat, toStation.lng],
   ];
+  const distKm = calculateDistance(fromStation, toStation) / 1000;
+  // Estimate duration at ~40 km/h average transit speed
+  const duration = (distKm / 40) * 3600;
+  return { geometry, duration };
 }
 
 export async function calculateMultiStopRoute(
