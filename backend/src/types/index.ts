@@ -71,3 +71,15 @@ export interface ApiResponse<T> {
   error?: string;
   timestamp: string;
 }
+
+export interface ShapePoint {
+  lat: number;
+  lng: number;
+  sequence: number;
+  distance?: number;
+}
+
+export interface ShapeSegmentResult {
+  coordinates: [number, number][];
+  durationMinutes: number;
+}
