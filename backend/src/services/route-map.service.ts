@@ -1,6 +1,8 @@
 import { Coordinate, RouteSegment } from "../types";
 import { findStopCoordinate } from "./gtfs-stop-indexservice";
 import { geocodeAddress } from "./geocoding.service";
+import { getTripBetweenStations, getShapeSegment, stopIdToCoordinate } from "./gtfs-timetable.service";
+import { queryRaptorJourney, isRaptorLoaded, RaptorJourney } from "./gtfs-raptor.service";
 import axios from "axios";
 
 export function calculateDistance(coord1: Coordinate, coord2: Coordinate): number {
@@ -74,9 +76,82 @@ export async function osrmRoute(
 export function getPTVRoute(
   fromStation: Coordinate,
   toStation: Coordinate,
-  _fromName?: string,
-  _toName?: string
+  fromName?: string,
+  toName?: string
 ): { geometry: number[][]; duration: number } {
+  console.log(`[getPTVRoute] fromName="${fromName}", toName="${toName}"`);
+
+  if (fromName && toName) {
+    if (isRaptorLoaded()) {
+      const raptorJourney = queryRaptorJourney(fromName, toName);
+
+      if (raptorJourney) {
+        const geometry: number[][] = [];
+
+        for (const leg of raptorJourney.legs) {
+          if (leg.type === "transit" && leg.stopTimes) {
+            for (const st of leg.stopTimes) {
+              const coord = stopIdToCoordinate.get(st.stop);
+              if (coord) {
+                geometry.push([coord.lat, coord.lng]);
+              }
+            }
+          }
+        }
+
+        if (geometry.length >= 2) {
+          console.log(
+            `[getPTVRoute] SUCCESS: Raptor journey with ${raptorJourney.legs.length} legs, ${raptorJourney.durationMinutes} mins`
+          );
+          return {
+            geometry,
+            duration: raptorJourney.durationMinutes * 60,
+          };
+        }
+      }
+    }
+
+    const trip = getTripBetweenStations(fromName, toName);
+
+    if (trip) {
+      const shapeSegment = getShapeSegment(trip.tripId, trip.fromStopId, trip.toStopId);
+
+      if (shapeSegment) {
+        console.log(
+          `[getPTVRoute] SUCCESS: Shape geometry with ${shapeSegment.coordinates.length} points, ${shapeSegment.durationMinutes} mins`
+        );
+        return {
+          geometry: shapeSegment.coordinates,
+          duration: shapeSegment.durationMinutes * 60,
+        };
+      }
+
+      if (trip.stopSequence.length > 0) {
+        const geometry: number[][] = [];
+
+        for (const stop of trip.stopSequence) {
+          const coord = stopIdToCoordinate.get(stop.stopId);
+          if (coord) {
+            geometry.push([coord.lat, coord.lng]);
+          }
+        }
+
+        if (geometry.length >= 2) {
+          const [fromH, fromM, fromS] = trip.departureTime.split(":").map(Number);
+          const [toH, toM, toS] = trip.arrivalTime.split(":").map(Number);
+          let durationSec = toH * 3600 + toM * 60 + toS - (fromH * 3600 + fromM * 60 + fromS);
+          if (durationSec < 0) durationSec += 24 * 3600;
+
+          console.log(
+            `[getPTVRoute] SUCCESS: Stop coords geometry with ${geometry.length} stops, ${Math.round(durationSec / 60)} mins`
+          );
+          return { geometry, duration: durationSec };
+        }
+      }
+    }
+  }
+
+  console.log(`[getPTVRoute] FALLBACK: Using straight line`);
   const geometry = [
     [fromStation.lat, fromStation.lng],
     [toStation.lat, toStation.lng],
