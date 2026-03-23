@@ -25,7 +25,7 @@ function toRad(degrees: number): number {
   return (degrees * Math.PI) / 180;
 }
 
-function distanceMeters(coord1: Coordinate, coord2: Coordinate): number {
+export function distanceMeters(coord1: Coordinate, coord2: Coordinate): number {
   const R = 6371;
   const dLat = toRad(coord2.lat - coord1.lat);
   const dLng = toRad(coord2.lng - coord1.lng);
@@ -45,6 +45,7 @@ function normalizeName(value: string): string {
     .trim()
     .replace(/\s+/g, " ")
     .replace(/\bstation\b/g, "")
+    .replace(/\brailway\b/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -153,4 +154,26 @@ export function getAllStops(): StopInfo[] {
 
 export function getStopsByType(type: TransportType): StopInfo[] {
   return getAllStops().filter((s) => s.transportTypes.includes(type));
+}
+
+export function findNearestStation(coord: Coordinate, maxDistanceMeters: number = 1500): StopInfo | null {
+  const stops = getAllStops();
+  let nearest: StopInfo | null = null;
+  let nearestDist = Infinity;
+
+  for (const stop of stops) {
+    const dist = distanceMeters(coord, stop.position);
+    if (dist < nearestDist && dist <= maxDistanceMeters) {
+      nearestDist = dist;
+      nearest = stop;
+    }
+  }
+
+  if (nearest) {
+    console.log(`[Nearest Station] Found "${nearest.name}" at ${Math.round(nearestDist)}m from destination`);
+  } else {
+    console.log(`[Nearest Station] No station within ${maxDistanceMeters}m of destination`);
+  }
+
+  return nearest;
 }

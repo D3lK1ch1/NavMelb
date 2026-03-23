@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { ApiResponse, Coordinate, RouteSegment, RouteResult, RouteStrategy, Waypoint } from "../types";
 import {calculateDistance, lookupDestinationAny, osrmRoute, getPTVRoute} from "../services/route-map.service";
-import { getAllStops, TransportType } from "../services/gtfs-stop-indexservice";
+import { getAllStops, findNearestStation, TransportType } from "../services/gtfs-stop-indexservice";
 import { findDeparturesForWaypoints } from "../services/gtfs-timetable.service";
 import { searchStreets, nearbyStreets } from "../services/street-data.service";
 
@@ -176,9 +176,11 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
         });
       }
 
+      console.log(`[Route Calc] PTV strategy: ${allStations.length} stations`);
       let prevPoint = origin;
       let prevStationName: string | undefined;
       for (const station of allStations) {
+        console.log(`[Route Calc] PTV segment: "${prevStationName || 'origin'}" -> "${station.name}"`);
         const ptRoute = getPTVRoute(
           prevPoint, 
           station.position,
@@ -199,7 +201,10 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
         prevStationName = station.name;
       }
 
-      const finalRoute = getPTVRoute(prevPoint, destination, prevStationName);
+      const nearestToDest = findNearestStation(destination);
+      const destStationName = nearestToDest?.name;
+      console.log(`[Route Calc] PTV final: "${prevStationName}" -> "${destStationName || 'destination'}"`);
+      const finalRoute = getPTVRoute(prevPoint, destination, prevStationName, destStationName);
       const finalDist = calculateDistance(prevPoint, destination);
       segments.push({
         type: "ptv",
@@ -220,8 +225,10 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
         });
       }
 
+      console.log(`[Route Calc] Park-and-ride: ${stations.length} stations`);
       let currentPos = origin;
 
+      console.log(`[Route Calc] Car: origin -> "${stations[0].name}"`);
       const carToFirst = await osrmRoute(currentPos, stations[0].position);
       segments.push({
         type: "car",
@@ -237,6 +244,7 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       for (let i = 0; i < stations.length - 1; i++) {
         const fromStation = stations[i];
         const toStation = stations[i + 1];
+        console.log(`[Route Calc] PTV: "${fromStation.name}" -> "${toStation.name}"`);
         const ptRoute = getPTVRoute(
           fromStation.position, 
           toStation.position,
@@ -256,7 +264,11 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
         currentPos = toStation.position;
       }
 
-      const finalRoute = getPTVRoute(currentPos, destination, stations[stations.length - 1].name);
+      const lastStation = stations[stations.length - 1];
+      const nearestToDest = findNearestStation(destination);
+      const destStationName = nearestToDest?.name;
+      console.log(`[Route Calc] PTV: "${lastStation.name}" -> "${destStationName || 'destination'}"`);
+      const finalRoute = getPTVRoute(currentPos, destination, lastStation.name, destStationName);
       const finalDist = calculateDistance(currentPos, destination);
       segments.push({
         type: "ptv",
