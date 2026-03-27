@@ -1,26 +1,13 @@
 import { Coordinate, RouteSegment } from "../types";
+import { distanceMeters } from "../utils/geo";
 import { findStopCoordinate } from "./gtfs-stop-indexservice";
 import { geocodeAddress } from "./geocoding.service";
 import { getTripBetweenStations, getShapeSegment, stopIdToCoordinate } from "./gtfs-timetable.service";
-import { queryRaptorJourney, isRaptorLoaded, RaptorJourney } from "./gtfs-raptor.service";
+import { queryRaptorJourney as queryStreamingRaptor, isRaptorLoaded as isStreamingRaptorLoaded } from "./gtfs-raptor-streaming.service";
 import axios from "axios";
 
 export function calculateDistance(coord1: Coordinate, coord2: Coordinate): number {
-  const R = 6371;
-  const dLat = toRad(coord2.lat - coord1.lat);
-  const dLng = toRad(coord2.lng - coord1.lng);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(coord1.lat)) *
-      Math.cos(toRad(coord2.lat)) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c * 1000;
-}
-
-function toRad(degrees: number): number {
-  return (degrees * Math.PI) / 180;
+  return distanceMeters(coord1, coord2);
 }
 
 export function lookupDestination(query: string): Coordinate | null {
@@ -82,8 +69,8 @@ export function getPTVRoute(
   console.log(`[getPTVRoute] fromName="${fromName}", toName="${toName}"`);
 
   if (fromName && toName) {
-    if (isRaptorLoaded()) {
-      const raptorJourney = queryRaptorJourney(fromName, toName);
+    if (isStreamingRaptorLoaded()) {
+      const raptorJourney = queryStreamingRaptor(fromName, toName);
 
       if (raptorJourney) {
         const geometry: number[][] = [];
@@ -101,7 +88,7 @@ export function getPTVRoute(
 
         if (geometry.length >= 2) {
           console.log(
-            `[getPTVRoute] SUCCESS: Raptor journey with ${raptorJourney.legs.length} legs, ${raptorJourney.durationMinutes} mins`
+            `[getPTVRoute] SUCCESS: Streaming Raptor journey with ${raptorJourney.legs.length} legs, ${raptorJourney.durationMinutes} mins`
           );
           return {
             geometry,
@@ -114,38 +101,66 @@ export function getPTVRoute(
     const trip = getTripBetweenStations(fromName, toName);
 
     if (trip) {
-      const shapeSegment = getShapeSegment(trip.tripId, trip.fromStopId, trip.toStopId);
+      switch (trip.kind) {
+        case "multi-leg": {
+          const geometry: number[][] = [];
 
-      if (shapeSegment) {
-        console.log(
-          `[getPTVRoute] SUCCESS: Shape geometry with ${shapeSegment.coordinates.length} points, ${shapeSegment.durationMinutes} mins`
-        );
-        return {
-          geometry: shapeSegment.coordinates,
-          duration: shapeSegment.durationMinutes * 60,
-        };
-      }
-
-      if (trip.stopSequence.length > 0) {
-        const geometry: number[][] = [];
-
-        for (const stop of trip.stopSequence) {
-          const coord = stopIdToCoordinate.get(stop.stopId);
-          if (coord) {
-            geometry.push([coord.lat, coord.lng]);
+          for (const leg of trip.legs) {
+            for (const stop of leg.stopSequence) {
+              const coord = stopIdToCoordinate.get(stop.stopId);
+              if (coord) {
+                geometry.push([coord.lat, coord.lng]);
+              }
+            }
           }
+
+          if (geometry.length >= 2) {
+            console.log(
+              `[getPTVRoute] SUCCESS: Multi-leg trip via "${trip.viaStation}", ${trip.legs.length} legs, ${trip.totalDurationMinutes} mins`
+            );
+            return {
+              geometry,
+              duration: trip.totalDurationMinutes * 60,
+            };
+          }
+          break;
         }
+        case "direct": {
+          const shapeSegment = getShapeSegment(trip.tripId, trip.fromStopId, trip.toStopId);
 
-        if (geometry.length >= 2) {
-          const [fromH, fromM, fromS] = trip.departureTime.split(":").map(Number);
-          const [toH, toM, toS] = trip.arrivalTime.split(":").map(Number);
-          let durationSec = toH * 3600 + toM * 60 + toS - (fromH * 3600 + fromM * 60 + fromS);
-          if (durationSec < 0) durationSec += 24 * 3600;
+          if (shapeSegment) {
+            console.log(
+              `[getPTVRoute] SUCCESS: Shape geometry with ${shapeSegment.coordinates.length} points, ${shapeSegment.durationMinutes} mins`
+            );
+            return {
+              geometry: shapeSegment.coordinates,
+              duration: shapeSegment.durationMinutes * 60,
+            };
+          }
 
-          console.log(
-            `[getPTVRoute] SUCCESS: Stop coords geometry with ${geometry.length} stops, ${Math.round(durationSec / 60)} mins`
-          );
-          return { geometry, duration: durationSec };
+          if (trip.stopSequence.length > 0) {
+            const geometry: number[][] = [];
+
+            for (const stop of trip.stopSequence) {
+              const coord = stopIdToCoordinate.get(stop.stopId);
+              if (coord) {
+                geometry.push([coord.lat, coord.lng]);
+              }
+            }
+
+            if (geometry.length >= 2) {
+              const [fromH, fromM, fromS] = trip.departureTime.split(":").map(Number);
+              const [toH, toM, toS] = trip.arrivalTime.split(":").map(Number);
+              let durationSec = toH * 3600 + toM * 60 + toS - (fromH * 3600 + fromM * 60 + fromS);
+              if (durationSec < 0) durationSec += 24 * 3600;
+
+              console.log(
+                `[getPTVRoute] SUCCESS: Stop coords geometry with ${geometry.length} stops, ${Math.round(durationSec / 60)} mins`
+              );
+              return { geometry, duration: durationSec };
+            }
+          }
+          break;
         }
       }
     }

@@ -3,6 +3,7 @@ import path from "path";
 import AdmZip from "adm-zip";
 import { parse } from "csv-parse/sync";
 import { Coordinate } from "../types";
+import { distanceMeters } from "../utils/geo";
 
 type StopRow = {
   stop_name: string;
@@ -21,23 +22,7 @@ const stopIndex = new Map<string, StopEntry>();
 const proximityMergeMeters = 150;
 let cachedStops: StopInfo[] | null = null;
 
-function toRad(degrees: number): number {
-  return (degrees * Math.PI) / 180;
-}
-
-export function distanceMeters(coord1: Coordinate, coord2: Coordinate): number {
-  const R = 6371;
-  const dLat = toRad(coord2.lat - coord1.lat);
-  const dLng = toRad(coord2.lng - coord1.lng);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(coord1.lat)) *
-      Math.cos(toRad(coord2.lat)) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c * 1000;
-}
+export { distanceMeters };
 
 function normalizeName(value: string): string {
   return value

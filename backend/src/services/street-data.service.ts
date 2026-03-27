@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { Coordinate } from "../types";
+import { distanceMeters } from "../utils/geo";
 
 interface StreetFeature {
   name: string;
@@ -10,18 +11,6 @@ interface StreetFeature {
 }
 
 let streets: StreetFeature[] = [];
-
-/** Haversine distance in meters between two coordinates. */
-function distanceMeters(a: Coordinate, b: Coordinate): number {
-  const R = 6371000;
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const sinLat = Math.sin(dLat / 2);
-  const sinLng = Math.sin(dLng / 2);
-  const h = sinLat * sinLat + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * sinLng * sinLng;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
 
 /**
  * Load street names GeoJSON from disk.
