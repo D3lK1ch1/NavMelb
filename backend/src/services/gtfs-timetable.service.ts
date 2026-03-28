@@ -288,6 +288,8 @@ export async function loadGtfsTimetables(): Promise<void> {
     .filter((d) => d.isDirectory())
     .map((d) => d.name);
 
+  feedDirs.sort((a, b) => parseInt(a.replace(/\D/g, "") || "0") - parseInt(b.replace(/\D/g, "") || "0"));
+
   console.log("Loading GTFS Timetables...");
 
   for (const feedDir of feedDirs) {
@@ -371,10 +373,11 @@ export async function loadGtfsTimetables(): Promise<void> {
                 console.log(`[GTFS Stops] "${stopRow.stop_name}" -> parent station: ${stopRow.stop_id}`);
               }
             }
-          } else if (isParentStation && isInStopTimes) {
+          } else {
             const existingId = stopNameToId.get(normalized)!;
             const existingInStopTimes = stopIdToTrips.has(existingId);
-            if (!existingInStopTimes) {
+            const newIsBetter = (isParentStation && isInStopTimes) || (!existingInStopTimes && isInStopTimes);
+            if (newIsBetter) {
               stopNameToId.set(normalized, stopRow.stop_id);
               console.log(`[GTFS Stops] "${stopRow.stop_name}" upgraded: ${existingId} -> ${stopRow.stop_id}`);
             }
