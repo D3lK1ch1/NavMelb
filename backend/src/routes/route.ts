@@ -267,18 +267,22 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       const lastStation = stations[stations.length - 1];
       const nearestToDest = findNearestStation(destination);
       const destStationName = nearestToDest?.name;
-      console.log(`[Route Calc] PTV: "${lastStation.name}" -> "${destStationName || 'destination'}"`);
-      const finalRoute = getPTVRoute(currentPos, destination, lastStation.name, destStationName);
-      const finalDist = calculateDistance(currentPos, destination);
-      segments.push({
-        type: "ptv",
-        coordinates: finalRoute.geometry,
-        color: "#F44336",
-        distance: finalDist,
-        duration: finalRoute.duration,
-      });
-      totalDistance += finalDist;
-      totalDuration += finalRoute.duration;
+      if (destStationName && destStationName === lastStation.name) {
+        console.log(`[Route Calc] Skipping final PTV segment — destination is already "${lastStation.name}"`);
+      } else {
+        console.log(`[Route Calc] PTV: "${lastStation.name}" -> "${destStationName || 'destination'}"`);
+        const finalRoute = getPTVRoute(currentPos, destination, lastStation.name, destStationName);
+        const finalDist = calculateDistance(currentPos, destination);
+        segments.push({
+          type: "ptv",
+          coordinates: finalRoute.geometry,
+          color: "#F44336",
+          distance: finalDist,
+          duration: finalRoute.duration,
+        });
+        totalDistance += finalDist;
+        totalDuration += finalRoute.duration;
+      }
     }
 
     const departureInfo = strategy !== "car" 
