@@ -47,6 +47,7 @@ This markdown is used throughout all projects, as rules and regulations to proje
 | MapComponent not rendering on screen | Layout nesting in controlPanel with 50% maxHeight, {showMap} rendering boolean | Restructure layout: map above control panel, fix conditional render | completed |
 | Tile layer URL typo | https:/// instead of https:// caused invalid tile requests | Fixed typo in Leaflet HTML injection (Copilot 2025-02-16) | completed |
 | MapComponent WebView injection silent failures | JavaScript errors in injected code don't propagate to React | Add onError callback to WebView, wrap Leaflet init in try-catch | in-progress |
+| GTFS stop name mismatch ("clayton rd" vs "clayton") | Multiple GTFS feeds name same physical stop differently; stop index stores both as separate entries | Cross-reference stops by coordinate proximity across feeds at load time | not-started |
 | API service doesn't retry on timeout | Axios configured with 10s timeout but no retry mechanism | Add retry-axios or implement exponential backoff | not-started |
 | FrontendType `ParkingLot` not exported | Types defined in backend but missing in frontend | Export from frontend types/index.ts | not-started |
 | Mock traffic lights in memory only | AllTrafficLights() returns static array, no persistence | Use SQLite for Phase 1, migrate to PostGIS P2 | not-started |
@@ -256,5 +257,186 @@ Track mistakes across agent conversations to avoid regression:
 | Bounds validation missing | API accepts invalid coords (-37.5000, -37.9000 swapped), causes wrong results | Add minLat < maxLat assertion in getTrafficLightsByBounds service | - |
 | Error responses not typed | API returns 400/500 responses without error payload contract | Define ErrorResponse interface in types, validate in error handler catch blocks | - |
 | Expecting `.gitignore` to hide already tracked dependencies | `node_modules` was committed previously, so git keeps showing changes | Run one-time `git rm -r --cached <path>/node_modules` then commit ignore rules | Codex 2026-02-23 |
+| Function params unused but not called | `getTripBetweenStations()` existed but `getPTVRoute()` never called it, `_fromName` ignored | Verify functions are actually CALLED in test output, check underscore prefix means unused | OpenCode 2026-03-20 |
+| Stale async state (race condition on strategy/stop change) | Multiple route API calls in-flight simultaneously; last to resolve wins regardless of order | `requestGenRef` generation counter — increment on each new request, discard response if generation no longer current | Claude 2026-03-28 |
+| Normalising at query time only doesn't fix downstream names | Stripping road suffixes at search time fixes lookup but `getAllStops()` still returns un-normalised names, which are passed to routing services | Always normalise at load/storage time so stored keys are canonical; query normalisation alone is not enough | Claude 2026-03-28 |
+| Global suffix stripping breaking proper noun station names | Stripping "street" from all stop names turned "Flinders Street Station" → "flinders", making it unsearchable | Don't strip suffixes that are part of proper station names; fix at GTFS data level, not normaliser | Claude 2026-03-28 |
 
---- 
+---
+
+## 2026-03-18: PTV Real Travel Times & Geometry (Commits 2-3)
+
+**Task**: Implement GTFS-based PTV routing with real geometry and duration
+
+### What Implemented
+
+**Commit 2** (`gtfs-timetable.service.ts`):
+- Added `stopIdToCoordinate` and `stopIdToName` maps
+- Updated `loadGtfsTimetables()` to populate both maps from stops.txt
+- Added `TransitTrip` interface with stop sequence
+- Added `getTripBetweenStations()` function to find trips between stations
+
+**Commit 3** (`route-map.service.ts`):
+- Updated `getPTVRoute()` to return `{ geometry, duration }` instead of just coordinates
+- Now uses GTFS timetable data for real transit geometry
+- Calculates real duration from departure/arrival times
+- Falls back to straight line when station names unavailable
+
+**Additional fixes** (TypeScript):
+- Fixed `StopRow` type to include `stop_lat`, `stop_lon`
+- Updated `route.ts` to use new `.geometry` and `.duration` properties
+- Added `prevStationName` tracking for passing station names to getPTVRoute
+
+### Issues Encountered
+
+**Issue 1: Flinders Street geocoding to USA**
+- Root cause: Nominatim returns global results by default
+- Fix: Added `countrycodes: "au"` and Melbourne viewbox to geocoding params
+
+**Issue 2: PTV routes showing straight line (FIXED)**
+- Root cause: UTF-8 BOM in CSV files causing parser to fail
+- Fix: Added `stripBomBuffer()` to remove BOM before parsing
+- Also: Changed from sync `csv-parse/sync` to streaming `csv-parse` async iterator
+- Now includes ALL feeds (trains, trams, buses) - memory-safe streaming
+
+**Issue 3: ERR_STRING_TOO_LONG crash**
+- Root cause: `.toString()` on 100MB+ GTFS files exceeds Node.js string limit
+- Fix: Streaming parser processes line-by-line without loading entire file into memory
+- Updated `loadGtfsTimetables()` to be async
+- Updated `index.ts` to properly await the async function
+
+### Testing
+- TypeScript compiles successfully
+- Backend now loads all GTFS feeds (including buses) with streaming parser
+- User testing required: restart backend and test PTV routes
+
+**[OPENCODE] 2026-03-19 - Git History Rewrite**
+- **Task**: Remove large files from git history to reduce repo size
+- **Problem**: `.git` folder was 263MB due to GTFS zip files and tracked node_modules in early commits
+- **What Removed from History**:
+  - `gtfs/[0-9]*/google_transit.zip` - 7 files totaling ~200MB
+  - `backend/node_modules/*` - committed in early commits (77cab23, 15cb46e, 33d7ed8)
+- **Commands Used**:
+  ```
+  git stash  # save unstaged changes
+  git filter-branch --force --index-filter "git rm --cached --ignore-unmatch 'gtfs/[0-9]*/google_transit.zip'" --tag-name-filter cat -- --all
+  git for-each-ref --format='delete %(refname)' refs/original | git update-ref --stdin
+  git reflog expire --expire=now --all
+  git gc --aggressive --prune=now
+  git push origin --force --all
+  git stash pop  # restore changes
+  ```
+- **Result**: `.git` size reduced from 263MB to 11MB (96% reduction)
+- **What Changed**:
+  - `.gitignore` - simplified to `gtfs/` and `*/node_modules/`
+  - Note: Local `gtfs/` folder preserved (just untracked), local node_modules untouched
+- **Caveat**: Anyone with existing clones needs to re-clone after force push
+- **Lesson Learned**: `.gitignore` only prevents tracking NEW files; already-tracked large files require history rewrite
+
+**[OPENCODE] 2026-03-19 - Additional .gitignore Entries**
+- **Task**: Add build/cache directories to .gitignore
+- **Added Patterns**:
+  - `backend/dist/` - TypeScript compiled output (regenerated by `npm run build`)
+  - `frontend/.expo/` - Expo dev cache (regenerated when running Expo)
+- **Standard patterns also added**: `dist/`, `build/`, `*.tsbuildinfo`, `.expo-shared/`, `.env`, `.env.*`
+
+---
+
+## 2026-03-20: PTV Route Geometry & Performance Fix (OpenCode)
+
+**Problem**:
+- PTV routes showed straight lines with fake durations (e.g., 22 mins for Deakin Uni → Flinders St when reality is 1+ hour)
+- `getPTVRoute()` function existed but was ignoring station names via underscore-prefixed params and returning straight lines
+- `getTripBetweenStations()` function existed but was NEVER CALLED
+- Performance: O(n) iteration through all trips to find station connections
+
+**What Changed**:
+
+1. **`gtfs-timetable.service.ts`**:
+   - Added `stopIdToTrips` reverse index: `Map<stop_id, tripId[]>`
+   - Built during `loadGtfsTimetables()` alongside existing indices
+   - `getTripBetweenStations()` now uses index: O(trips_from_station) instead of O(all_trips)
+   - Added debug logging to trace station name matching
+
+2. **`route-map.service.ts`**:
+   - Removed underscore prefixes from `_fromName`, `_toName`
+   - Now calls `getTripBetweenStations(fromName, toName)` when names provided
+   - Returns real GTFS geometry (intermediate stops from stop sequence)
+   - Calculates real duration from departure/arrival times
+   - Falls back to straight line only when trip not found
+
+3. **`route.ts`**:
+   - Added `[Route Calc]` debug logging for all PTV and park-and-ride segments
+
+**Validation**:
+- TypeScript compiles without errors (`npx tsc --noEmit`)
+
+**Next Steps** (pending user testing):
+- Verify real PTV geometry shows on map with intermediate stops
+- Verify realistic durations match actual transit times
+- Station name matching may need normalization improvements
+
+---
+
+## 2026-03-23: PTV Final Leg Destination Name Fix (OpenCode)
+
+**Problem**:
+- PTV routes showed straight line for final leg: `Southern Cross → destination`
+- Debug log showed: `toName="undefined"` (literal string, not null)
+- `getPTVRoute()` received only 3 args instead of 4
+
+**Root Cause**: `getPTVRoute()` called with only 3 args on the final leg — `toName` was never passed, so the timetable lookup received `undefined` as a string.
+
+**Solution**: Added `findNearestStation()` to reverse-geocode destination coordinates to nearest station name:
+
+1. **`gtfs-stop-indexservice.ts`**:
+   - Exported `distanceMeters()` function
+   - Added `findNearestStation(coord, maxDistanceMeters?)` - finds nearest station within 1500m
+   - Debug logging shows found station or "No station within Xm"
+
+2. **`route.ts`**:
+   - Imported `findNearestStation`
+   - Updated PTV strategy final leg (line 205): now passes 4th argument
+   - Updated park-and-ride final leg (line 266): now passes 4th argument
+
+3. **Also Fixed**: `distanceMeters()` had bug using `coord1.lat` instead of `coord1.lng` for longitude difference
+
+**Fallback Behavior**: If no station within 1500m, logs warning and falls back to straight line.
+
+**Validation**: TypeScript compiles cleanly. 2 locations fixed: PTV final leg + park-and-ride final leg.
+
+**Files Changed**:
+| File | Change |
+|------|--------|
+| `gtfs-stop-indexservice.ts` | Exported `distanceMeters`, added `findNearestStation()` |
+| `route.ts` | Updated both final leg calls to include destination station name |
+
+**Note**: Missing function arguments silently pass `undefined` (becomes string "undefined" in logs) — always verify all params passed, especially for final segments in loops.
+
+---
+
+## 2026-03-28: Waypoint Chaining for Multi-Stop PTV (Claude)
+
+**Problem**:
+- No N-stop transit chaining — frontend had three separate state variables (`origin`, `destination`, `waypoints`) with no unified ordered stop model
+- `getPTVRoute()` silently returned a straight-line estimate on failure instead of null — callers couldn't detect missing routes
+- Race condition: rapid strategy/stop changes fired multiple parallel API calls; stale responses overwrote current map state
+- Departure time had no way to thread through legs (each leg queried independently with no time context)
+
+**What Changed**:
+- `route-map.service.ts`: `getPTVRoute()` returns `null` on failure; added `chainJourneyLegs(stops, departureTime)` which chains N stops, threading each leg's arrival time as the next leg's departure
+- `route.ts`: PTV and park-and-ride handlers replaced manual loops with `chainJourneyLegs()`; returns 400 with specific `from`/`to` leg names on failure; accepts optional `departureTime` (HH:MM or HH:MM:SS, defaults to now)
+- `MapExplorationScreen.tsx`: replaced `origin`/`destination`/`waypoints` with unified `stops[]` array labelled A/B/C; `requestGenRef` generation counter discards stale async responses
+- `api.ts`: added optional `departureTime` parameter
+
+**Known Issue**: Raptor GTFS feed names stop "Clayton Rd", timetable service knows it as "Clayton" — different feed, different name, same physical station. Stop search returns both; picking "Clayton Rd" breaks routing. Needs cross-feed proximity merge at load time (tracked in Known Issues table).
+
+**Files Changed**:
+| File | Change |
+|------|--------|
+| `backend/src/services/route-map.service.ts` | `getPTVRoute` nullable; added `chainJourneyLegs`, `addSecondsToTime` |
+| `backend/src/routes/route.ts` | PTV/P&R use `chainJourneyLegs`; `departureTime` normalisation |
+| `frontend/src/screens/MapExplorationScreen.tsx` | Unified `stops[]`; `requestGenRef` race condition fix |
+| `frontend/src/services/api.ts` | Added `departureTime` param to `calculateRoute` |
+
+**Next Steps**: Test Clayton → Southern Cross → Flinders Street end-to-end; implement GTFS cross-feed stop name normalisation by proximity merge.
