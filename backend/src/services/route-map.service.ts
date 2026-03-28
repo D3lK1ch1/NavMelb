@@ -65,7 +65,7 @@ export function getPTVRoute(
   toStation: Coordinate,
   fromName?: string,
   toName?: string
-): { geometry: number[][]; duration: number } {
+): { geometry: number[][]; duration: number } | null {
   console.log(`[getPTVRoute] fromName="${fromName}", toName="${toName}"`);
 
   if (fromName && toName) {
@@ -166,14 +166,50 @@ export function getPTVRoute(
     }
   }
 
-  console.log(`[getPTVRoute] FALLBACK: Using straight line`);
-  const geometry = [
-    [fromStation.lat, fromStation.lng],
-    [toStation.lat, toStation.lng],
-  ];
-  const distKm = calculateDistance(fromStation, toStation) / 1000;
-  const duration = (distKm / 40) * 3600;
-  return { geometry, duration };
+  console.log(`[getPTVRoute] NULL: No route found for "${fromName}" -> "${toName}"`);
+  return null;
+}
+
+function addSecondsToTime(time: string, seconds: number): string {
+  const parts = time.split(":").map(Number);
+  const h = parts[0] ?? 0;
+  const m = parts[1] ?? 0;
+  const s = parts[2] ?? 0;
+  const total = h * 3600 + m * 60 + s + Math.round(seconds);
+  const hh = Math.floor(total / 3600) % 24;
+  const mm = Math.floor((total % 3600) / 60);
+  const ss = total % 60;
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+}
+
+export type ChainResult =
+  | { ok: true; legs: Array<{ geometry: number[][]; duration: number; arrivalTime: string }> }
+  | { ok: false; failedLeg: number; from: string; to: string };
+
+export function chainJourneyLegs(
+  stops: Array<{ coord: Coordinate; name: string }>,
+  departureTime: string
+): ChainResult {
+  if (stops.length < 2) {
+    return { ok: false, failedLeg: 0, from: stops[0]?.name ?? "unknown", to: "unknown" };
+  }
+
+  const legs: Array<{ geometry: number[][]; duration: number; arrivalTime: string }> = [];
+  let currentTime = departureTime;
+
+  for (let i = 0; i < stops.length - 1; i++) {
+    const from = stops[i];
+    const to = stops[i + 1];
+    const result = getPTVRoute(from.coord, to.coord, from.name, to.name);
+    if (result === null) {
+      return { ok: false, failedLeg: i, from: from.name, to: to.name };
+    }
+    const arrivalTime = addSecondsToTime(currentTime, result.duration);
+    legs.push({ ...result, arrivalTime });
+    currentTime = arrivalTime;
+  }
+
+  return { ok: true, legs };
 }
 
 export async function calculateMultiStopRoute(
