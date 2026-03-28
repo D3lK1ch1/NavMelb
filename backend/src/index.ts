@@ -1,8 +1,8 @@
 import dotenv from "dotenv";
 import { createApp } from "./app";
 import { loadGtfsStops } from "./services/gtfs-stop-indexservice";
-import { loadGtfsTimetables, loadGtfsShapes } from "./services/gtfs-timetable.service";
-import { loadGtfsForRaptor } from "./services/gtfs-raptor.service";
+import { loadGtfsTimetables} from "./services/gtfs-timetable.service";
+import { loadRaptorStreaming } from "./services/gtfs-raptor-streaming.service";
 import { loadStreetData } from "./services/street-data.service";
 
 dotenv.config();
@@ -10,8 +10,6 @@ dotenv.config();
 async function bootstrap() {
   loadGtfsStops();
   await loadGtfsTimetables();
-  // await loadGtfsShapes(); // Disabled - too memory intensive, use stop coordinates instead
-  // await loadGtfsForRaptor(); // Disabled - too slow, use simple single-trip fallback
   loadStreetData();
 
   const app = createApp();
@@ -21,6 +19,14 @@ async function bootstrap() {
     console.log(`Backend running on port ${PORT}`);
     console.log("Melbourne Navigation App - Backend");
     console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+  });
+
+  // Load Raptor after the server is already accepting requests.
+  // Station search and geocoding work immediately; Raptor routing
+  // becomes available once the background load finishes.
+  loadRaptorStreaming().catch((err) => {
+    console.error("[Raptor] FATAL: Failed to load Raptor, continuing without it");
+    console.error(err);
   });
 }
 
