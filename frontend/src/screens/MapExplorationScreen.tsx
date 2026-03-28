@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, ScrollView } from "react-native";
 import * as Location from "expo-location";
 import { lookupDestination, searchStations, calculateRoute } from "../services/api";
@@ -8,11 +8,26 @@ import { mapExplorationStyles as styles } from "../styles/mapExploration";
 
 type StationSearchResult = { name: string; position: Coordinate; transportTypes: TransportType[] };
 
+// A single stop in the journey chain: A -> B -> C -> ...
+type JourneyStop = {
+  coord: Coordinate;
+  name: string;
+  type: "place" | "station";
+};
+
+// Label stops as A, B, C, D...
+const stopLabel = (index: number) => String.fromCharCode(65 + index);
+
+// Format current time as "HH:MM" for the departure time input default
+function nowAsTimeString(): string {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+}
+
 export const MapExplorationScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
-  const [origin, setOrigin] = useState<Coordinate | null>(null);
-  const [destination, setDestination] = useState<Coordinate | null>(null);
-  const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
+  const [stops, setStops] = useState<JourneyStop[]>([]);
+  const [departureTime, setDepartureTime] = useState<string>(nowAsTimeString());
   const [searchResults, setSearchResults] = useState<StationSearchResult[]>([]);
   const [strategy, setStrategy] = useState<RouteStrategy>("car");
   const [routeSegments, setRouteSegments] = useState<RouteSegment[]>([]);
@@ -22,6 +37,15 @@ export const MapExplorationScreen: React.FC = () => {
   const [showMap, setShowMap] = useState(true);
   const [searchMode, setSearchMode] = useState<"place" | "station">("place");
   const [transportFilter, setTransportFilter] = useState<"tram" | "train" | "bus" | undefined>(undefined);
+  const requestGenRef = useRef(0);
+
+  const addStop = (coord: Coordinate, name: string, type: "place" | "station") => {
+    setStops((prev) => [...prev, { coord, name, type }]);
+  };
+
+  const removeStop = (index: number) => {
+    setStops((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const handleUseMyLocation = async () => {
     try {
@@ -32,10 +56,10 @@ export const MapExplorationScreen: React.FC = () => {
         setError("Location permission denied");
         return;
       }
-
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const coord: Coordinate = { lat: pos.coords.latitude, lng: pos.coords.longitude, name: "My Location" };
-      setOrigin(coord);
+      const coord: Coordinate = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      // Insert location at the front of the chain as the starting point
+      setStops((prev) => [{ coord, name: "My Location", type: "place" }, ...prev]);
       setShowMap(true);
     } catch (err: any) {
       setError(err?.message || "Failed to get location");
@@ -45,45 +69,80 @@ export const MapExplorationScreen: React.FC = () => {
   };
 
   const calculateRoutePreview = useCallback(async () => {
-    if (!origin || !destination) return;
+    if (stops.length < 2) return;
+
+    // Increment generation — any in-flight request from a previous generation will be discarded
+    const myGeneration = ++requestGenRef.current;
+
+    setLoading(true);
+    setError(null);
+    setRouteResult(null);
+    setRouteSegments([]);
 
     try {
-      const stationCount = waypoints.filter((w) => w.type === "station").length;
-      if (strategy === "ptv" && stationCount < 2) {
-        setRouteResult(null);
-        setRouteSegments([]);
-        setError("PTV routing requires at least 2 station waypoints (use Station search to add them).");
+      const origin = stops[0].coord;
+      const destination = stops[stops.length - 1].coord;
+
+      const stationStops = stops.filter((s) => s.type === "station");
+
+      if (strategy === "ptv" && stationStops.length < 2) {
+        if (requestGenRef.current === myGeneration) {
+          setError("PTV routing requires at least 2 station stops in your chain.");
+        }
         return;
       }
-      if (strategy === "park-and-ride" && stationCount < 1) {
-        setRouteResult(null);
-        setRouteSegments([]);
-        setError("Park & Ride requires at least 1 station waypoint (use Station search to add one).");
+      if (strategy === "park-and-ride" && stationStops.length < 1) {
+        if (requestGenRef.current === myGeneration) {
+          setError("Park & Ride requires at least 1 station stop in your chain.");
+        }
         return;
       }
 
-      const response: ApiResponse<RouteResult> = await calculateRoute(origin, destination, strategy, waypoints);
+      const waypoints: Waypoint[] = stops.map((s) => ({
+        position: s.coord,
+        type: s.type,
+        name: s.name,
+      }));
+
+      const response: ApiResponse<RouteResult> = await calculateRoute(
+        origin,
+        destination,
+        strategy,
+        waypoints,
+        departureTime
+      );
+
+      // Discard if a newer request has already started
+      if (requestGenRef.current !== myGeneration) return;
+
       if (response.success && response.data) {
         setRouteResult(response.data);
         setRouteSegments(response.data.segments);
-        setError(null);
-      } else if (!response.success) {
+      } else {
         setError(response.error || "Route calculation failed");
       }
     } catch (err) {
+      if (requestGenRef.current !== myGeneration) return;
       const message =
         (err as any)?.response?.data?.error ||
         (err as any)?.message ||
         "Route preview failed";
       setError(message);
+    } finally {
+      if (requestGenRef.current === myGeneration) {
+        setLoading(false);
+      }
     }
-  }, [origin, destination, strategy, waypoints]);
+  }, [stops, strategy, departureTime]);
 
   useEffect(() => {
-    if (origin && destination) {
+    if (stops.length >= 2) {
       calculateRoutePreview();
+    } else {
+      setRouteResult(null);
+      setRouteSegments([]);
     }
-  }, [origin, destination, strategy, waypoints, calculateRoutePreview]);
+  }, [stops, strategy, departureTime, calculateRoutePreview]);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
@@ -105,13 +164,7 @@ export const MapExplorationScreen: React.FC = () => {
       } else {
         const response = await lookupDestination(searchQuery);
         if (response.success && response.data) {
-          const newPlace = { ...response.data, name: searchQuery };
-
-          if (!origin) {
-            setOrigin(newPlace);
-          } else if (!destination) {
-            setDestination(newPlace);
-          }
+          addStop({ ...response.data }, searchQuery, "place");
           setSearchQuery("");
         } else {
           setError(response.error || "Place not found");
@@ -125,42 +178,27 @@ export const MapExplorationScreen: React.FC = () => {
   };
 
   const handleSelectStation = (station: StationSearchResult) => {
-    const newWaypoint: Waypoint = {
-      position: station.position,
-      type: "station",
-      name: station.name,
-      transportTypes: station.transportTypes,
-    };
-
-    const newWaypoints = [...waypoints, newWaypoint];
-    setWaypoints(newWaypoints);
+    addStop(station.position, station.name, "station");
     setSearchResults([]);
     setSearchQuery("");
-  };
-
-  const handleRemoveWaypoint = (index: number) => {
-    const newWaypoints = waypoints.filter((_, i) => i !== index);
-    setWaypoints(newWaypoints);
   };
 
   const resetForm = () => {
     setSearchQuery("");
-    setOrigin(null);
-    setDestination(null);
-    setWaypoints([]);
+    setStops([]);
     setSearchResults([]);
     setRouteSegments([]);
     setRouteResult(null);
     setError(null);
+    setDepartureTime(nowAsTimeString());
   };
 
-  const getMarkers = () => {
-    const result = [];
-    if (origin) result.push({ lat: origin.lat, lng: origin.lng, label: origin.name || "Start" });
-    if (destination) result.push({ lat: destination.lat, lng: destination.lng, label: destination.name || "Destination" });
-    waypoints.forEach((w, i) => result.push({ lat: w.position.lat, lng: w.position.lng, label: w.name || `Station ${i + 1}` }));
-    return result;
-  };
+  const getMarkers = () =>
+    stops.map((s, i) => ({
+      lat: s.coord.lat,
+      lng: s.coord.lng,
+      label: `${stopLabel(i)}: ${s.name}`,
+    }));
 
   const formatDuration = (seconds: number) => {
     const minutes = Math.round(seconds / 60);
@@ -178,10 +216,7 @@ export const MapExplorationScreen: React.FC = () => {
             markers={getMarkers()}
             routeSegments={routeSegments}
             onMapClick={({ lat, lng }) => {
-              const picked: Coordinate = { lat, lng, name: "Picked" };
-              if (!origin) setOrigin(picked);
-              else if (!destination) setDestination(picked);
-              else setDestination(picked);
+              addStop({ lat, lng }, "Picked location", "place");
               setShowMap(true);
             }}
           />
@@ -192,6 +227,7 @@ export const MapExplorationScreen: React.FC = () => {
         <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
           <Text style={styles.title}>NavMelb</Text>
 
+          {/* Strategy selector */}
           <View style={styles.routeTypeContainer}>
             <TouchableOpacity
               style={[styles.routeTypeButton, strategy === "car" && styles.routeTypeActive]}
@@ -213,12 +249,25 @@ export const MapExplorationScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          <Text style={{ marginBottom: 8, color: '#666', fontSize: 12 }}>
+          <Text style={{ marginBottom: 8, color: "#666", fontSize: 12 }}>
             {strategy === "car" && "Driving route only"}
-            {strategy === "ptv" && "Public transport only (requires stations)"}
-            {strategy === "park-and-ride" && `Drive to station, then PTV: ${waypoints.length} station(s)`}
+            {strategy === "ptv" && "Add 2+ station stops to chain your journey"}
+            {strategy === "park-and-ride" && "Drive to first station, then take PTV"}
           </Text>
 
+          {/* Departure time input */}
+          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
+            <Text style={{ marginRight: 8, color: "#444", fontSize: 13 }}>Depart at:</Text>
+            <TextInput
+              style={[styles.input, { flex: 1, marginBottom: 0 }]}
+              placeholder="HH:MM"
+              value={departureTime}
+              onChangeText={setDepartureTime}
+              keyboardType="numeric"
+            />
+          </View>
+
+          {/* Search mode toggle */}
           <View style={styles.searchModeContainer}>
             <TouchableOpacity
               style={[styles.modeButton, searchMode === "place" && styles.modeActive]}
@@ -234,10 +283,11 @@ export const MapExplorationScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
+          {/* Search bar */}
           <View style={styles.inputSection}>
             <TextInput
               style={styles.input}
-              placeholder={searchMode === "station" ? "Search station..." : "Search place..."}
+              placeholder={searchMode === "station" ? "Search station to add..." : "Search place to add..."}
               value={searchQuery}
               onChangeText={setSearchQuery}
               editable={!loading}
@@ -247,14 +297,11 @@ export const MapExplorationScreen: React.FC = () => {
               onPress={handleSearch}
               disabled={loading}
             >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>Search</Text>
-              )}
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Add</Text>}
             </TouchableOpacity>
           </View>
 
+          {/* Station search results */}
           {searchResults.length > 0 && (
             <ScrollView style={styles.resultsContainer} nestedScrollEnabled>
               {searchResults.map((result, index) => (
@@ -264,7 +311,7 @@ export const MapExplorationScreen: React.FC = () => {
                   onPress={() => handleSelectStation(result)}
                 >
                   <Text style={styles.resultText}>
-                    {result.transportTypes.join(",")}: {result.name}
+                    {result.transportTypes.join(",")}:  {result.name}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -273,38 +320,30 @@ export const MapExplorationScreen: React.FC = () => {
 
           {error && <Text style={styles.error}>{error}</Text>}
 
-          {origin && (
+          {/* Journey chain: A -> B -> C -> ... */}
+          {stops.length > 0 && (
             <View style={styles.resultBox}>
-              <Text style={styles.resultLabel}>From: {origin.name}</Text>
-              <Text style={styles.resultValue}>
-                {origin.lat.toFixed(4)}, {origin.lng.toFixed(4)}
-              </Text>
-            </View>
-          )}
-
-          {waypoints.length > 0 && (
-            <View style={styles.resultBox}>
-              <Text style={styles.resultLabel}>Via Stations:</Text>
-              {waypoints.map((w, i) => (
-                <View key={i} style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={styles.resultValue}>• {(w.transportTypes || []).join(",")}: {w.name}</Text>
-                  <TouchableOpacity onPress={() => handleRemoveWaypoint(i)} style={{ marginLeft: 8 }}>
-                    <Text style={{ color: 'red' }}>✕</Text>
+              <Text style={styles.resultLabel}>Journey:</Text>
+              {stops.map((stop, i) => (
+                <View key={i} style={{ flexDirection: "row", alignItems: "center", marginVertical: 2 }}>
+                  <Text style={{ fontWeight: "bold", width: 24, color: "#333" }}>{stopLabel(i)}</Text>
+                  <Text style={[styles.resultValue, { flex: 1 }]}>
+                    {stop.type === "station" ? "🚉 " : "📍 "}{stop.name}
+                  </Text>
+                  <TouchableOpacity onPress={() => removeStop(i)} style={{ paddingHorizontal: 6 }}>
+                    <Text style={{ color: "red", fontSize: 14 }}>✕</Text>
                   </TouchableOpacity>
                 </View>
               ))}
+              {stops.length < 2 && (
+                <Text style={{ color: "#888", fontSize: 12, marginTop: 4 }}>
+                  Add at least one more stop to calculate a route.
+                </Text>
+              )}
             </View>
           )}
 
-          {destination && (
-            <View style={styles.resultBox}>
-              <Text style={styles.resultLabel}>To: {destination.name}</Text>
-              <Text style={styles.resultValue}>
-                {destination.lat.toFixed(4)}, {destination.lng.toFixed(4)}
-              </Text>
-            </View>
-          )}
-
+          {/* Route result summary */}
           {routeResult && (
             <View style={[styles.resultBox, styles.distanceBox]}>
               <Text style={styles.resultLabel}>Distance:</Text>
@@ -315,7 +354,10 @@ export const MapExplorationScreen: React.FC = () => {
                 <>
                   <Text style={styles.resultLabel}>Est. Arrival:</Text>
                   <Text style={styles.resultValue}>
-                    {new Date(routeResult.estimatedArrival).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(routeResult.estimatedArrival).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
                   </Text>
                 </>
               )}
@@ -332,11 +374,9 @@ export const MapExplorationScreen: React.FC = () => {
             </View>
           )}
 
+          {/* Actions */}
           <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={[styles.button, styles.secondaryButton]}
-              onPress={resetForm}
-            >
+            <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={resetForm}>
               <Text style={styles.buttonText}>Reset</Text>
             </TouchableOpacity>
             <TouchableOpacity

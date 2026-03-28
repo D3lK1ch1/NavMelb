@@ -54,7 +54,8 @@ export async function calculateRoute(
   origin: Coordinate,
   destination: Coordinate,
   strategy: RouteStrategy,
-  waypoints?: Waypoint[]
+  waypoints?: Waypoint[],
+  departureTime?: string
 ): Promise<ApiResponse<RouteResult>> {
   try {
     const response = await api.post<ApiResponse<RouteResult>>("/route/calculate", {
@@ -62,6 +63,7 @@ export async function calculateRoute(
       destination,
       waypoints,
       strategy,
+      departureTime,
     });
     return response.data;
   } catch (error) {
