@@ -25,9 +25,9 @@ function nowAsTimeString(): string {
 }
 
 function transportIcon(types: TransportType[]): string {
-  if (types.includes("train")) return "🚆";
-  if (types.includes("tram")) return "🚃";
-  return "🚌";
+  if (types.includes("train")) return "train";
+  if (types.includes("tram")) return "tram";
+  return "bus";
 }
 
 export const MapExplorationScreen: React.FC = () => {
@@ -93,7 +93,7 @@ export const MapExplorationScreen: React.FC = () => {
 
       if (strategy === "ptv" && stationStops.length < 1) {
         if (requestGenRef.current === myGeneration) {
-          setError("PTV routing requires at least one station stop in your chain.");
+          setError("PTV routing requires at least one station stop, and then add a consecutive station for PTV routing.");
         }
         return;
       }
@@ -103,6 +103,8 @@ export const MapExplorationScreen: React.FC = () => {
         type: s.type,
         name: s.name,
       }));
+
+      console.log("Waypoints being sent :" , JSON.stringify(waypoints.map(w=> ({name: w.name, type: w.type}))));
 
       const response: ApiResponse<RouteResult> = await calculateRoute(
         origin,
