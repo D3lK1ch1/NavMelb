@@ -4,7 +4,7 @@ export interface Coordinate {
   name?: string;
 }
 
-export type RouteStrategy = "car" | "ptv" | "park-and-ride";
+export type RouteStrategy = "car" | "ptv";
 
 export type TransportType = "tram" | "train" | "bus";
 

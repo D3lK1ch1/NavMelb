@@ -3,7 +3,7 @@ export interface Coordinate {
   lng: number;
 }
 
-export type RouteStrategy = "car" | "ptv" | "park-and-ride";
+export type RouteStrategy = "car" | "ptv";
 
 export type TransportType = "tram" | "train" | "bus";
 
