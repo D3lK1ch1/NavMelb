@@ -6,7 +6,7 @@ import { ApiResponse, Coordinate, Waypoint, RouteSegment, RouteStrategy, RouteRe
 import MapComponent from "../components/MapComponent";
 import { mapExplorationStyles as styles } from "../styles/mapExploration";
 
-type StationSearchResult = { name: string; position: Coordinate; transportTypes: TransportType[] };
+type StationSearchResult = { name: string; position: Coordinate; transportTypes: TransportType[]; displayName?: string; routeNames?: string[] };
 
 // A single stop in the journey chain: A -> B -> C -> ...
 type JourneyStop = {
@@ -22,6 +22,12 @@ const stopLabel = (index: number) => String.fromCharCode(65 + index);
 function nowAsTimeString(): string {
   const now = new Date();
   return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+}
+
+function transportIcon(types: TransportType[]): string {
+  if (types.includes("train")) return "🚆";
+  if (types.includes("tram")) return "🚃";
+  return "🚌";
 }
 
 export const MapExplorationScreen: React.FC = () => {
@@ -85,15 +91,9 @@ export const MapExplorationScreen: React.FC = () => {
 
       const stationStops = stops.filter((s) => s.type === "station");
 
-      if (strategy === "ptv" && stationStops.length < 2) {
+      if (strategy === "ptv" && stationStops.length < 1) {
         if (requestGenRef.current === myGeneration) {
-          setError("PTV routing requires at least 2 station stops in your chain.");
-        }
-        return;
-      }
-      if (strategy === "park-and-ride" && stationStops.length < 1) {
-        if (requestGenRef.current === myGeneration) {
-          setError("Park & Ride requires at least 1 station stop in your chain.");
+          setError("PTV routing requires at least one station stop in your chain.");
         }
         return;
       }
@@ -241,18 +241,11 @@ export const MapExplorationScreen: React.FC = () => {
             >
               <Text style={styles.routeTypeText}>PTV</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.routeTypeButton, strategy === "park-and-ride" && styles.routeTypeActive]}
-              onPress={() => setStrategy("park-and-ride")}
-            >
-              <Text style={styles.routeTypeText}>Park & Ride</Text>
-            </TouchableOpacity>
           </View>
 
           <Text style={{ marginBottom: 8, color: "#666", fontSize: 12 }}>
             {strategy === "car" && "Driving route only"}
-            {strategy === "ptv" && "Add 2+ station stops to chain your journey"}
-            {strategy === "park-and-ride" && "Drive to first station, then take PTV"}
+            {strategy === "ptv" && "Mix stations + places — station→station is PTV, everything else drives"}
           </Text>
 
           {/* Departure time input */}
@@ -311,7 +304,10 @@ export const MapExplorationScreen: React.FC = () => {
                   onPress={() => handleSelectStation(result)}
                 >
                   <Text style={styles.resultText}>
-                    {result.transportTypes.join(",")}:  {result.name}
+                    {transportIcon(result.transportTypes)}{"  "}{result.displayName ?? result.name}
+                    {result.routeNames && result.routeNames.length > 0
+                      ? `  ·  ${result.routeNames.slice(0, 3).join(" · ")}`
+                      : ""}
                   </Text>
                 </TouchableOpacity>
               ))}
