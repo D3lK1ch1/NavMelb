@@ -73,7 +73,7 @@ describe("POST /api/map/route/calculate", () => {
   });
 
   describe("ptv strategy", () => {
-    it("returns PTV segments with geometry for 2+ station waypoints", async () => {
+    it("returns mixed car+ptv segments for place→station→station→place chain", async () => {
       const res = await request(app)
         .post("/api/map/route/calculate")
         .send({
@@ -86,31 +86,34 @@ describe("POST /api/map/route/calculate", () => {
           ],
         });
 
+      // origin(place) → Flinders(station) → car
+      // Flinders(station) → Richmond(station) → ptv
+      // Richmond(station) → destination(place) → car
       expect(res.status).toBe(200);
-      expect(res.body.data.segments.length).toBeGreaterThanOrEqual(2);
-      for (const seg of res.body.data.segments) {
-        expect(seg.type).toBe("ptv");
+      expect(res.body.success).toBe(true);
+      const segments = res.body.data.segments;
+      expect(segments.length).toBeGreaterThanOrEqual(1);
+      const ptvSegs = segments.filter((s: { type: string }) => s.type === "ptv");
+      expect(ptvSegs.length).toBeGreaterThan(0);
+      for (const seg of segments) {
         expect(seg.coordinates).toBeDefined();
         expect(seg.coordinates.length).toBeGreaterThan(0);
-        expect(seg.duration).toBeDefined();
         expect(typeof seg.duration).toBe("number");
       }
     });
 
-    it("returns 400 with fewer than 2 stations", async () => {
+    it("returns 400 when no station waypoints provided", async () => {
       const res = await request(app)
         .post("/api/map/route/calculate")
         .send({
           origin,
           destination,
           strategy: "ptv",
-          waypoints: [
-            { position: { lat: -37.8183, lng: 144.9671 }, type: "station", name: "Flinders Street" },
-          ],
+          waypoints: [],
         });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toMatch(/at least 2 stations/i);
+      expect(res.body.error).toMatch(/at least one station/i);
     });
 
     it("includes departure info", async () => {
@@ -141,8 +144,28 @@ describe("POST /api/map/route/calculate", () => {
     });
   });
 
-  describe("park-and-ride strategy", () => {
-    it("returns car segment first, then PTV segments", async () => {
+  describe("ptv mixed waypoints", () => {
+    it("produces car+ptv+car when place→station→station→place", async () => {
+      const res = await request(app)
+        .post("/api/map/route/calculate")
+        .send({
+          origin,
+          destination,
+          strategy: "ptv",
+          waypoints: [
+            { position: { lat: -37.8183, lng: 144.9671 }, type: "station", name: "Flinders Street" },
+            { position: { lat: -37.8235, lng: 144.9898 }, type: "station", name: "Richmond" },
+          ],
+        });
+
+      expect(res.status).toBe(200);
+      const segments = res.body.data.segments;
+      expect(segments[0].type).toBe("car");
+      const ptvSegments = segments.filter((s: { type: string }) => s.type === "ptv");
+      expect(ptvSegments.length).toBeGreaterThan(0);
+    });
+
+    it("returns 400 for removed park-and-ride strategy", async () => {
       const res = await request(app)
         .post("/api/map/route/calculate")
         .send({
@@ -151,29 +174,11 @@ describe("POST /api/map/route/calculate", () => {
           strategy: "park-and-ride",
           waypoints: [
             { position: { lat: -37.8183, lng: 144.9671 }, type: "station", name: "Flinders Street" },
-            { position: { lat: -37.8235, lng: 144.9898 }, type: "station", name: "Richmond" },
           ],
         });
 
-      expect(res.status).toBe(200);
-      expect(res.body.data.segments[0].type).toBe("car");
-      // Remaining segments should be PTV
-      const ptvSegments = res.body.data.segments.filter((s: { type: string }) => s.type === "ptv");
-      expect(ptvSegments.length).toBeGreaterThan(0);
-    });
-
-    it("returns 400 when no stations provided", async () => {
-      const res = await request(app)
-        .post("/api/map/route/calculate")
-        .send({
-          origin,
-          destination,
-          strategy: "park-and-ride",
-          waypoints: [],
-        });
-
       expect(res.status).toBe(400);
-      expect(res.body.error).toMatch(/at least one station/i);
+      expect(res.body.error).toMatch(/invalid strategy/i);
     });
   });
 
