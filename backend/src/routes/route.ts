@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { ApiResponse, Coordinate, RouteSegment, RouteResult, RouteStrategy, Waypoint } from "../types";
-import { calculateDistance, lookupDestinationAny, osrmRoute, chainJourneyLegs } from "../services/route-map.service";
+import { calculateDistance, lookupDestinationAny, osrmRoute, getPTVRoute } from "../services/route-map.service";
 import { getAllStops, TransportType } from "../services/gtfs-stop-indexservice";
 import { findDeparturesForWaypoints } from "../services/gtfs-timetable.service";
 import { searchStreets, nearbyStreets } from "../services/street-data.service";
@@ -138,10 +138,10 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       });
     }
 
-    if (!strategy || !["car", "ptv", "park-and-ride"].includes(strategy)) {
+    if (!strategy || !["car", "ptv"].includes(strategy)) {
       return res.status(400).json({
         success: false,
-        error: "Invalid strategy. Must be: 'car', 'ptv', or 'park-and-ride'",
+        error: "Invalid strategy. Must be: 'car' or 'ptv'",
         timestamp: new Date().toISOString(),
       });
     }
@@ -169,118 +169,72 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       totalDuration = carRoute.duration;
 
     } else if (strategy === "ptv") {
-      const allStations = waypoints?.filter((w) => w.type === "station") || [];
-
-      if (allStations.length < 2) {
+      const stationStops = (waypoints || []).filter((w) => w.type === "station");
+      if (stationStops.length < 1) {
         return res.status(400).json({
           success: false,
-          error: "PTV routing requires at least 2 station stops. Add more stations to your journey.",
+          error: "PTV routing requires at least one station stop. Add stations to your journey chain.",
           timestamp: new Date().toISOString(),
         });
       }
 
-      const stops = allStations.map((s) => ({ coord: s.position, name: s.name! }));
-      console.log(`[Route Calc] PTV chain: ${stops.map((s) => s.name).join(" -> ")}`);
+      // Build full point list: origin + all waypoints + destination
+      const allPoints: Array<{ position: Coordinate; type: "station" | "place"; name: string }> = [
+        { position: origin, type: "place", name: "Origin" },
+        ...(waypoints || []).map((w) => ({ position: w.position, type: w.type, name: w.name || "" })),
+        { position: destination, type: "place", name: "Destination" },
+      ];
 
-      const chain = chainJourneyLegs(stops, resolvedDeparture);
+      let currentTime = resolvedDeparture;
 
-      if (!chain.ok) {
-        return res.status(400).json({
-          success: false,
-          error: `No route found between "${chain.from}" and "${chain.to}". Please check your stops and try again.`,
-          timestamp: new Date().toISOString(),
-        });
-      }
+      for (let i = 0; i < allPoints.length - 1; i++) {
+        const from = allPoints[i];
+        const to = allPoints[i + 1];
 
-      for (let i = 0; i < chain.legs.length; i++) {
-        const leg = chain.legs[i];
-        const dist = calculateDistance(allStations[i].position, allStations[i + 1].position);
-        segments.push({
-          type: "ptv",
-          coordinates: leg.geometry,
-          color: "#F44336",
-          distance: dist,
-          duration: leg.duration,
-        });
-        totalDistance += dist;
-        totalDuration += leg.duration;
-      }
-
-    } else if (strategy === "park-and-ride") {
-      const stations = waypoints?.filter((w) => w.type === "station") || [];
-
-      if (stations.length === 0) {
-        return res.status(400).json({
-          success: false,
-          error: "Park-and-ride requires at least one station waypoint.",
-          timestamp: new Date().toISOString(),
-        });
-      }
-
-      // Leg 1: drive from origin to first station
-      console.log(`[Route Calc] Car: origin -> "${stations[0].name}"`);
-      const carToFirst = await osrmRoute(origin, stations[0].position);
-      segments.push({
-        type: "car",
-        coordinates: carToFirst.geometry,
-        color: "#2196F3",
-        distance: carToFirst.distance,
-        duration: carToFirst.duration,
-      });
-      totalDistance += carToFirst.distance;
-      totalDuration += carToFirst.duration;
-
-      // Legs 2..N: transit through stations if there are at least 2
-      if (stations.length >= 2) {
-        const stops = stations.map((s) => ({ coord: s.position, name: s.name! }));
-        console.log(`[Route Calc] PTV chain: ${stops.map((s) => s.name).join(" -> ")}`);
-
-        // Offset departure time by the drive duration
-        const driveArrivalSec = Math.round(carToFirst.duration);
-        const nowSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
-        const transitDepartureSec = nowSec + driveArrivalSec;
-        const th = Math.floor(transitDepartureSec / 3600) % 24;
-        const tm = Math.floor((transitDepartureSec % 3600) / 60);
-        const transitDeparture = `${String(th).padStart(2, "0")}:${String(tm).padStart(2, "0")}:00`;
-
-        const chain = chainJourneyLegs(stops, transitDeparture);
-
-        if (!chain.ok) {
-          return res.status(400).json({
-            success: false,
-            error: `No transit route found between "${chain.from}" and "${chain.to}". Please check your stops and try again.`,
-            timestamp: new Date().toISOString(),
-          });
-        }
-
-        for (let i = 0; i < chain.legs.length; i++) {
-          const leg = chain.legs[i];
-          const dist = calculateDistance(stations[i].position, stations[i + 1].position);
+        if (from.type === "station" && to.type === "station") {
+          // PTV leg between consecutive stations
+          console.log(`[Route Calc] PTV: "${from.name}" -> "${to.name}"`);
+          const ptv = getPTVRoute(from.position, to.position, from.name, to.name);
+          if (!ptv) {
+            return res.status(400).json({
+              success: false,
+              error: `No PTV route found between "${from.name}" and "${to.name}". Check these stations have a direct connection.`,
+              timestamp: new Date().toISOString(),
+            });
+          }
+          const dist = calculateDistance(from.position, to.position);
           segments.push({
             type: "ptv",
-            coordinates: leg.geometry,
+            coordinates: ptv.geometry,
             color: "#F44336",
             distance: dist,
-            duration: leg.duration,
+            duration: ptv.duration,
           });
           totalDistance += dist;
-          totalDuration += leg.duration;
+          totalDuration += ptv.duration;
+
+          // Advance current time for departure info accuracy
+          const parts = currentTime.split(":").map(Number);
+          const baseSec = parts[0] * 3600 + parts[1] * 60 + (parts[2] || 0);
+          const nextSec = baseSec + Math.round(ptv.duration);
+          const nh = Math.floor(nextSec / 3600) % 24;
+          const nm = Math.floor((nextSec % 3600) / 60);
+          currentTime = `${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}:00`;
+        } else {
+          // Car leg: drive between any non-station-to-station pair
+          console.log(`[Route Calc] Car: "${from.name}" -> "${to.name}"`);
+          const car = await osrmRoute(from.position, to.position);
+          segments.push({
+            type: "car",
+            coordinates: car.geometry,
+            color: "#2196F3",
+            distance: car.distance,
+            duration: car.duration,
+          });
+          totalDistance += car.distance;
+          totalDuration += car.duration;
         }
       }
-
-      // Final leg: drive from last station to destination
-      const lastStation = stations[stations.length - 1];
-      console.log(`[Route Calc] Car: "${lastStation.name}" -> destination`);
-      const carToEnd = await osrmRoute(lastStation.position, destination);
-      segments.push({
-        type: "car",
-        coordinates: carToEnd.geometry,
-        color: "#2196F3",
-        distance: carToEnd.distance,
-        duration: carToEnd.duration,
-      });
-      totalDistance += carToEnd.distance;
-      totalDuration += carToEnd.duration;
     }
 
     const departureInfo = strategy !== "car"
