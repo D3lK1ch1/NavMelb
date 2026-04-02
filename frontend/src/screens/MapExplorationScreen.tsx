@@ -42,7 +42,7 @@ export const MapExplorationScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showMap, setShowMap] = useState(true);
   const [searchMode, setSearchMode] = useState<"place" | "station">("place");
-  const [transportFilter, setTransportFilter] = useState<"tram" | "train" | "bus" | undefined>(undefined);
+  const [transportFilter] = useState<"tram" | "train" | "bus" | undefined>(undefined);
   const requestGenRef = useRef(0);
 
   const addStop = (coord: Coordinate, name: string, type: "place" | "station") => {
@@ -326,7 +326,7 @@ export const MapExplorationScreen: React.FC = () => {
                 <View key={i} style={{ flexDirection: "row", alignItems: "center", marginVertical: 2 }}>
                   <Text style={{ fontWeight: "bold", width: 24, color: "#333" }}>{stopLabel(i)}</Text>
                   <Text style={[styles.resultValue, { flex: 1 }]}>
-                    {stop.type === "station" ? "🚉 " : "📍 "}{stop.name}
+                    {stop.type === "station" ? "Station: " : "Place: "}{stop.name}
                   </Text>
                   <TouchableOpacity onPress={() => removeStop(i)} style={{ paddingHorizontal: 6 }}>
                     <Text style={{ color: "red", fontSize: 14 }}>✕</Text>
