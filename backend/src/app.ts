@@ -5,7 +5,7 @@ import mapRoutes from "./routes/route";
 /** Create and configure the Express app without starting the server or loading data. */
 export function createApp(): Express {
   const app = express();
-  app.use(cors());
+  app.use(cors({origin: ["http://localhost:8081", "http://localhost:3000"]}));
   app.use(express.json());
 
   app.get("/health", (_, res) => {
