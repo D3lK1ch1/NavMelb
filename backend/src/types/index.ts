@@ -22,7 +22,7 @@ export interface RoutePlan {
 }
 
 export interface RouteSegment {
-  type: "car" | "ptv" | "failed";
+  type: "car" | "ptv" ;
   coordinates: number[][];
   color: string;
   distance?: number;
