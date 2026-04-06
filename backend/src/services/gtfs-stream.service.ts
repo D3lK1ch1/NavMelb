@@ -3,6 +3,8 @@ import path from "path";
 import AdmZip from "adm-zip";
 import { parse } from "csv-parse";
 
+const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
+
 export interface StreamStop {
   stop_id: string;
   stop_name: string;
@@ -131,7 +133,7 @@ export async function streamFeedData(
   const stats = fs.existsSync(zipPath)
     ? fs.statSync(zipPath)
     : { size: 0 };
-  console.log(`[Stream] Loading ${feedDir}: ${(stats.size / 1024 / 1024).toFixed(1)} MB`);
+  log(`[Stream] Loading ${feedDir}: ${(stats.size / 1024 / 1024).toFixed(1)} MB`);
 
   const stops: StreamStop[] = [];
   const trips: StreamTrip[] = [];
@@ -140,19 +142,19 @@ export async function streamFeedData(
   for await (const stop of streamStopsFromZip(zipPath)) {
     stops.push(stop);
   }
-  console.log(`[Stream] ${feedDir}: ${stops.length} stops`);
+  log(`[Stream] ${feedDir}: ${stops.length} stops`);
 
   for await (const trip of streamTripsFromZip(zipPath)) {
     trips.push(trip);
   }
-  console.log(`[Stream] ${feedDir}: ${trips.length} trips`);
+  log(`[Stream] ${feedDir}: ${trips.length} trips`);
 
   let count = 0;
   for await (const st of streamStopTimesFromZip(zipPath)) {
     stopTimes.push(st);
     count++;
   }
-  console.log(`[Stream] ${feedDir}: ${count} stop_times`);
+  log(`[Stream] ${feedDir}: ${count} stop_times`);
 
   return { stops, trips, stopTimes };
 }

@@ -6,6 +6,8 @@ import { Coordinate } from "../types";
 import { distanceMeters } from "../utils/geo";
 import { streamStopTimesFromZip } from "./gtfs-stream.service";
 
+const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
+
 type StopRow = {
   stop_id: string;
   stop_name: string;
@@ -199,12 +201,12 @@ export async function loadRouteAssociations(): Promise<void> {
       stopRouteNames.get(st.stop_id)!.add(routeName);
     }
 
-    console.log(`[GTFS Routes] ${feedDir}: route associations loaded`);
+    log(`[GTFS Routes] ${feedDir}: route associations loaded`);
   }
 
   // Clear the stop cache so the next getAllStops() call includes route names
   cachedStops = null;
-  console.log(`[GTFS Routes] Route associations complete for ${stopRouteNames.size} stops`);
+  log(`[GTFS Routes] Route associations complete for ${stopRouteNames.size} stops`);
 }
 
 export function findStopCoordinate(query: string): { position: Coordinate; transportTypes: TransportType[]; displayName: string } | null {
@@ -266,9 +268,9 @@ export function findNearestStation(coord: Coordinate, maxDistanceMeters: number 
   }
 
   if (nearest) {
-    console.log(`[Nearest Station] Found "${nearest.name}" at ${Math.round(nearestDist)}m from destination`);
+    log(`[Nearest Station] Found "${nearest.name}" at ${Math.round(nearestDist)}m from destination`);
   } else {
-    console.log(`[Nearest Station] No station within ${maxDistanceMeters}m of destination`);
+    log(`[Nearest Station] No station within ${maxDistanceMeters}m of destination`);
   }
 
   return nearest;

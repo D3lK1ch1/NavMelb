@@ -6,6 +6,8 @@ import { getTripBetweenStations, getShapeSegment, stopIdToCoordinate } from "./g
 import { queryRaptorJourney as queryStreamingRaptor, isRaptorLoaded as isStreamingRaptorLoaded } from "./gtfs-raptor-streaming.service";
 import axios from "axios";
 
+const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
+
 export function calculateDistance(coord1: Coordinate, coord2: Coordinate): number {
   return distanceMeters(coord1, coord2);
 }
@@ -61,12 +63,13 @@ export async function osrmRoute(
 }
 
 export function getPTVRoute(
+  //Didn't affect route-chaining in the end. Test whether it is affected when run
   fromStation: Coordinate,
   toStation: Coordinate,
   fromName?: string,
   toName?: string
 ): { geometry: number[][]; duration: number } | null {
-  console.log(`[getPTVRoute] fromName="${fromName}", toName="${toName}"`);
+  log(`[getPTVRoute] fromName="${fromName}", toName="${toName}"`);
 
   if (fromName && toName) {
     if (isStreamingRaptorLoaded()) {
@@ -87,7 +90,7 @@ export function getPTVRoute(
         }
 
         if (geometry.length >= 2) {
-          console.log(
+          log(
             `[getPTVRoute] SUCCESS: Streaming Raptor journey with ${raptorJourney.legs.length} legs, ${raptorJourney.durationMinutes} mins`
           );
           return {
@@ -115,7 +118,7 @@ export function getPTVRoute(
           }
 
           if (geometry.length >= 2) {
-            console.log(
+            log(
               `[getPTVRoute] SUCCESS: Multi-leg trip via "${trip.viaStation}", ${trip.legs.length} legs, ${trip.totalDurationMinutes} mins`
             );
             return {
@@ -129,7 +132,7 @@ export function getPTVRoute(
           const shapeSegment = getShapeSegment(trip.tripId, trip.fromStopId, trip.toStopId);
 
           if (shapeSegment) {
-            console.log(
+            log(
               `[getPTVRoute] SUCCESS: Shape geometry with ${shapeSegment.coordinates.length} points, ${shapeSegment.durationMinutes} mins`
             );
             return {
@@ -154,7 +157,7 @@ export function getPTVRoute(
               let durationSec = toH * 3600 + toM * 60 + toS - (fromH * 3600 + fromM * 60 + fromS);
               if (durationSec < 0) durationSec += 24 * 3600;
 
-              console.log(
+              log(
                 `[getPTVRoute] SUCCESS: Stop coords geometry with ${geometry.length} stops, ${Math.round(durationSec / 60)} mins`
               );
               return { geometry, duration: durationSec };
@@ -166,7 +169,7 @@ export function getPTVRoute(
     }
   }
 
-  console.log(`[getPTVRoute] NULL: No route found for "${fromName}" -> "${toName}"`);
+  log(`[getPTVRoute] NULL: No route found for "${fromName}" -> "${toName}"`);
   return null;
 }
 

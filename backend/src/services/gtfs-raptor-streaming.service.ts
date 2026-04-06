@@ -3,6 +3,8 @@ import path from "path";
 import { RaptorCore, RaptorJourney } from "./raptor-core";
 import { streamFeedData, StreamStop, StreamTrip, StreamStopTime } from "./gtfs-stream.service";
 
+const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
+
 interface GTFSData {
   raptor: RaptorCore | null;
   loaded: boolean;
@@ -70,8 +72,8 @@ export async function loadRaptorStreaming(): Promise<void> {
     return;
   }
 
-  console.log(`[Raptor] Loading ${trainFeeds.length} train feeds...`);
-  console.log(`[Raptor] Memory before load: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)} MB`);
+  log(`[Raptor] Loading ${trainFeeds.length} train feeds...`);
+  log(`[Raptor] Memory before load: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)} MB`);
 
   const raptor = new RaptorCore();
   const allStops: StreamStop[] = [];
@@ -79,16 +81,16 @@ export async function loadRaptorStreaming(): Promise<void> {
   const allStopTimes: StreamStopTime[] = [];
 
   for (const feedDir of trainFeeds) {
-    console.log(`[Raptor] Loading ${feedDir}...`);
+    log(`[Raptor] Loading ${feedDir}...`);
     const result = await streamFeedData(feedDir, absoluteRoot);
     for (const s of result.stops) allStops.push(s);
     for (const t of result.trips) allTrips.push(t);
     for (const st of result.stopTimes) allStopTimes.push(st);
-    console.log(`[Raptor] Memory after ${feedDir}: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)} MB`);
+    log(`[Raptor] Memory after ${feedDir}: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)} MB`);
   }
 
-  console.log(`[Raptor] Total: ${allStops.length} stops, ${allTrips.length} trips, ${allStopTimes.length} stop_times`);
-  console.log(`[Raptor] Initializing Raptor core...`);
+  log(`[Raptor] Total: ${allStops.length} stops, ${allTrips.length} trips, ${allStopTimes.length} stop_times`);
+  log(`[Raptor] Initializing Raptor core...`);
 
   raptor.initialize(allStops, allTrips, allStopTimes);
 
@@ -96,13 +98,13 @@ export async function loadRaptorStreaming(): Promise<void> {
   allTrips.length = 0;
   allStopTimes.length = 0;
 
-  console.log(`[Raptor] Memory after GC: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)} MB`);
+  log(`[Raptor] Memory after GC: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)} MB`);
 
   gtfsData.raptor = raptor;
   gtfsData.loaded = true;
 
   const stats = raptor.getStats();
-  console.log(`[Raptor] Ready: ${stats.stops} stops, ${stats.trips} trips`);
+  log(`[Raptor] Ready: ${stats.stops} stops, ${stats.trips} trips`);
 }
 
 export function isRaptorLoaded(): boolean {
@@ -115,7 +117,7 @@ export function queryRaptorJourney(
   departureTime?: string
 ): RaptorResultJourney | null {
   if (!isRaptorLoaded()) {
-    console.log("[Raptor] Not loaded");
+    log("[Raptor] Not loaded");
     return null;
   }
 
@@ -140,12 +142,12 @@ export function queryRaptorJourney(
   const fromStop = raptor.findStopByName(fromNormalized);
   const toStop = raptor.findStopByName(toNormalized);
 
-  console.log(`[Raptor] Query: "${fromStationName}" -> "${toStationName}"`);
-  console.log(`[Raptor] Normalized: "${fromNormalized}" -> "${toNormalized}"`);
-  console.log(`[Raptor] Stop IDs: "${fromStop?.id}" -> "${toStop?.id}"`);
+  log(`[Raptor] Query: "${fromStationName}" -> "${toStationName}"`);
+  log(`[Raptor] Normalized: "${fromNormalized}" -> "${toNormalized}"`);
+  log(`[Raptor] Stop IDs: "${fromStop?.id}" -> "${toStop?.id}"`);
 
   if (!fromStop || !toStop) {
-    console.log("[Raptor] Stop IDs not found");
+    log("[Raptor] Stop IDs not found");
     return null;
   }
 
@@ -156,7 +158,7 @@ export function queryRaptorJourney(
   const journey = raptor.query(fromStop.id, toStop.id, timeSeconds);
 
   if (!journey) {
-    console.log("[Raptor] No journey found");
+    log("[Raptor] No journey found");
     return null;
   }
 
@@ -176,7 +178,7 @@ export function queryRaptorJourney(
     })),
   }));
 
-  console.log(`[Raptor] Journey: ${journey.legs.length} legs, ${journey.durationMinutes} mins`);
+  log(`[Raptor] Journey: ${journey.legs.length} legs, ${journey.durationMinutes} mins`);
 
   return {
     departureTime: timeToString(journey.departureTime),

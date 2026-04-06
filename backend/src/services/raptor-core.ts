@@ -1,5 +1,7 @@
 import { StreamStop, StreamStopTime, StreamTrip } from "./gtfs-stream.service";
 
+const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
+
 export interface RaptorStop {
   id: string;
   name: string;
@@ -50,7 +52,7 @@ export class RaptorCore {
     trips: StreamTrip[],
     stopTimes: StreamStopTime[]
   ): void {
-    console.log(`[RaptorCore] Initializing with ${stops.length} stops, ${trips.length} trips, ${stopTimes.length} stop_times`);
+    log(`[RaptorCore] Initializing with ${stops.length} stops, ${trips.length} trips, ${stopTimes.length} stop_times`);
 
     this.stopIdToIdx.clear();
     this.stops = [];
@@ -120,7 +122,7 @@ export class RaptorCore {
       }
     }
 
-    console.log(`[RaptorCore] Built index: ${this.stopIdxToTripIdxs.size} stops with trips`);
+    log(`[RaptorCore] Built index: ${this.stopIdxToTripIdxs.size} stops with trips`);
   }
 
   private parseTime(time: string): number {
@@ -201,25 +203,25 @@ export class RaptorCore {
     const toIdx = this.stopIdToIdx.get(toStopId);
 
     if (fromIdx === undefined || toIdx === undefined) {
-      console.log(`[RaptorCore] Stop not found: ${fromStopId} or ${toStopId}`);
+      log(`[RaptorCore] Stop not found: ${fromStopId} or ${toStopId}`);
       return null;
     }
 
-    console.log(`[RaptorCore] Query: ${fromStopId} (idx ${fromIdx}) -> ${toStopId} (idx ${toIdx}) at ${Math.floor(departureTime / 60)}m`);
+    log(`[RaptorCore] Query: ${fromStopId} (idx ${fromIdx}) -> ${toStopId} (idx ${toIdx}) at ${Math.floor(departureTime / 60)}m`);
 
     const directJourney = this.findDirectTrip(fromIdx, toIdx, departureTime);
     if (directJourney) {
-      console.log(`[RaptorCore] Found direct trip: ${directJourney.durationMinutes} mins`);
+      log(`[RaptorCore] Found direct trip: ${directJourney.durationMinutes} mins`);
       return directJourney;
     }
 
     const transferJourney = this.findTransferJourney(fromIdx, toIdx, departureTime);
     if (transferJourney) {
-      console.log(`[RaptorCore] Found transfer journey: ${transferJourney.durationMinutes} mins`);
+      log(`[RaptorCore] Found transfer journey: ${transferJourney.durationMinutes} mins`);
       return transferJourney;
     }
 
-    console.log(`[RaptorCore] No journey found`);
+    log(`[RaptorCore] No journey found`);
     return null;
   }
 
@@ -277,7 +279,7 @@ export class RaptorCore {
 
     for (const trip1Idx of fromTripIdxs) {
       if (Date.now() > deadline) {
-        console.log("[RaptorCore] Transfer search deadline exceeded, deferring to timetable fallback");
+        log("[RaptorCore] Transfer search deadline exceeded, deferring to timetable fallback");
         return null;
       }
       const trip1 = this.trips[trip1Idx];

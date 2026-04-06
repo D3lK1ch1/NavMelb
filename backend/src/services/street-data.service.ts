@@ -3,6 +3,8 @@ import path from "path";
 import { Coordinate } from "../types";
 import { distanceMeters } from "../utils/geo";
 
+const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
+
 interface StreetFeature {
   name: string;
   displayName: string;
@@ -44,7 +46,7 @@ export function loadStreetData(filePath?: string): void {
     };
   });
 
-  console.log(`[Streets] Loaded ${streets.length} street centrelines`);
+  log(`[Streets] Loaded ${streets.length} street centrelines`);
 }
 
 /** Search streets by partial name match. */

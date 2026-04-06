@@ -5,6 +5,8 @@ import { parse } from "csv-parse";
 import { Coordinate, ShapePoint, ShapeSegmentResult } from "../types/index.js";
 import { distanceMeters } from "../utils/geo";
 
+const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
+
 interface BoundedCache<K, V> {
   get(key: K): V | undefined;
   set(key: K, value: V): void;
@@ -139,7 +141,7 @@ function buildTransferGraph(): void {
     });
   }
 
-  console.log(`[Transfer Graph] Building for ${stations.length} stations...`);
+  log(`[Transfer Graph] Building for ${stations.length} stations...`);
 
   for (const station of stations) {
     const nearby: TransferStation[] = [];
@@ -159,7 +161,7 @@ function buildTransferGraph(): void {
     }
   }
 
-  console.log(`[Transfer Graph] Built. ${transferGraph.size} stations have transfers.`);
+  log(`[Transfer Graph] Built. ${transferGraph.size} stations have transfers.`);
 }
 
 function getTransferStations(stopId: string): TransferStation[] {
@@ -290,13 +292,13 @@ export async function loadGtfsTimetables(): Promise<void> {
 
   feedDirs.sort((a, b) => parseInt(a.replace(/\D/g, "") || "0") - parseInt(b.replace(/\D/g, "") || "0"));
 
-  console.log("Loading GTFS Timetables...");
+  log("Loading GTFS Timetables...");
 
   for (const feedDir of feedDirs) {
     const type = getTransportType(feedDir);
 
     if (type !== "train") {
-      console.log(`[GTFS] Skipping ${feedDir} (${type}) - not needed for initial routing`);
+      log(`[GTFS] Skipping ${feedDir} (${type}) - not needed for initial routing`);
       continue;
     }
 
@@ -305,7 +307,7 @@ export async function loadGtfsTimetables(): Promise<void> {
 
     try {
       const zip = new AdmZip(zipPath);
-      console.log(`[GTFS] Loading ${feedDir} (${type})...`);
+      log(`[GTFS] Loading ${feedDir} (${type})...`);
 
       const tripsEntry = zip.getEntry("trips.txt");
       if (tripsEntry) {
@@ -347,7 +349,7 @@ export async function loadGtfsTimetables(): Promise<void> {
           
           rowCount++;
         }
-        console.log(`[GTFS] ${feedDir} (${type}): ${rowCount} stop_times loaded`);
+        log(`[GTFS] ${feedDir} (${type}): ${rowCount} stop_times loaded`);
       }
 
       const stopsEntry = zip.getEntry("stops.txt");
@@ -370,7 +372,7 @@ export async function loadGtfsTimetables(): Promise<void> {
             if (isInStopTimes || isParentStation) {
               stopNameToId.set(normalized, stopRow.stop_id);
               if (isParentStation && !isInStopTimes) {
-                console.log(`[GTFS Stops] "${stopRow.stop_name}" -> parent station: ${stopRow.stop_id}`);
+                log(`[GTFS Stops] "${stopRow.stop_name}" -> parent station: ${stopRow.stop_id}`);
               }
             }
           } else {
@@ -379,19 +381,19 @@ export async function loadGtfsTimetables(): Promise<void> {
             const newIsBetter = (isParentStation && isInStopTimes) || (!existingInStopTimes && isInStopTimes);
             if (newIsBetter) {
               stopNameToId.set(normalized, stopRow.stop_id);
-              console.log(`[GTFS Stops] "${stopRow.stop_name}" upgraded: ${existingId} -> ${stopRow.stop_id}`);
+              log(`[GTFS Stops] "${stopRow.stop_name}" upgraded: ${existingId} -> ${stopRow.stop_id}`);
             }
           }
         }
       }
 
-      console.log(`Loaded ${type} data from ${feedDir}`);
+      log(`Loaded ${type} data from ${feedDir}`);
     } catch (err) {
       console.error(`Failed to load ${feedDir}:`, err);
     }
   }
 
-  console.log(`[GTFS Timetables] Loaded: ${tripIndex.size} trips, ${stopTimesIndex.size} stop_times entries, ${stopNameToId.size} stops`);
+  log(`[GTFS Timetables] Loaded: ${tripIndex.size} trips, ${stopTimesIndex.size} stop_times entries, ${stopNameToId.size} stops`);
 
   buildTransferGraph();
 }
@@ -498,17 +500,17 @@ export function getTripBetweenStations(
   const fromStopId = stopNameToId.get(fromNormalized);
   const toStopId = stopNameToId.get(toNormalized);
 
-  console.log(`[PTV Route] Looking for trip: "${fromStationName}" -> "${toStationName}"`);
-  console.log(`[PTV Route] Normalized: "${fromNormalized}" -> "${toNormalized}"`);
-  console.log(`[PTV Route] Stop IDs: "${fromStopId}" -> "${toStopId}"`);
+  log(`[PTV Route] Looking for trip: "${fromStationName}" -> "${toStationName}"`);
+  log(`[PTV Route] Normalized: "${fromNormalized}" -> "${toNormalized}"`);
+  log(`[PTV Route] Stop IDs: "${fromStopId}" -> "${toStopId}"`);
 
   if (!fromStopId || !toStopId) {
-    console.log(`[PTV Route] FAIL: Could not find stop IDs for stations`);
+    log(`[PTV Route] FAIL: Could not find stop IDs for stations`);
     return null;
   }
 
   const tripsFromStation = stopIdToTrips.get(fromStopId) || [];
-  console.log(`[PTV Route] Trips passing fromStopId: ${tripsFromStation.length}`);
+  log(`[PTV Route] Trips passing fromStopId: ${tripsFromStation.length}`);
 
   for (const tripId of tripsFromStation) {
     const stopTimes = stopTimesIndex.get(tripId);
@@ -541,7 +543,7 @@ export function getTripBetweenStations(
       const toM = parseInt(toTime.arrival_time.split(':')[1]);
       const durationMins = (toH - fromH) * 60 + (toM - fromM);
 
-      console.log(`[PTV Route] SUCCESS: Found trip ${tripId}, ${sequence.length} stops, ~${durationMins} mins`);
+      log(`[PTV Route] SUCCESS: Found trip ${tripId}, ${sequence.length} stops, ~${durationMins} mins`);
 
       return {
         kind: "direct",
@@ -555,12 +557,12 @@ export function getTripBetweenStations(
     }
   }
 
-  console.log(`[PTV Route] FAIL: No trip found connecting both stations`);
-  console.log(`[PTV Route] Trying transfer journey...`);
+  log(`[PTV Route] FAIL: No trip found connecting both stations`);
+  log(`[PTV Route] Trying transfer journey...`);
   const transferJourney = findTransferJourney(fromStopId, toStopId, fromStationName, toStationName);
 
   if (transferJourney) {
-    console.log(`[PTV Route] TRANSFER SUCCESS: via "${transferJourney.viaStation}", ${transferJourney.legs.length} legs, ~${transferJourney.totalDurationMinutes} mins`);
+    log(`[PTV Route] TRANSFER SUCCESS: via "${transferJourney.viaStation}", ${transferJourney.legs.length} legs, ~${transferJourney.totalDurationMinutes} mins`);
 
     const allStops: StopTimeEntry[] = [];
     for (const leg of transferJourney.legs) {
@@ -581,7 +583,7 @@ export function getTripBetweenStations(
     };
   }
 
-  console.log(`[PTV Route] FAIL: No transfer journey found`);
+  log(`[PTV Route] FAIL: No transfer journey found`);
   return null;
 }
 
@@ -614,7 +616,7 @@ export async function loadGtfsShapes(): Promise<void> {
     .filter((d) => d.isDirectory())
     .map((d) => d.name);
 
-  console.log("Loading GTFS Shapes...");
+  log("Loading GTFS Shapes...");
 
   let totalShapes = 0;
   let totalPoints = 0;
@@ -655,14 +657,14 @@ export async function loadGtfsShapes(): Promise<void> {
         }
 
         totalPoints += pointCount;
-        console.log(`[GTFS Shapes] ${feedDir}: ${pointCount} points for ${totalShapes} shapes`);
+        log(`[GTFS Shapes] ${feedDir}: ${pointCount} points for ${totalShapes} shapes`);
       }
     } catch (err) {
       console.error(`Failed to load shapes from ${feedDir}:`, err);
     }
   }
 
-  console.log(`[GTFS Shapes] Loaded ${totalShapes} shapes with ${totalPoints} total points`);
+  log(`[GTFS Shapes] Loaded ${totalShapes} shapes with ${totalPoints} total points`);
 }
 
 export function getShapeSegment(
@@ -677,19 +679,19 @@ export function getShapeSegment(
 
   const shapeId = tripToShapeId.get(tripId);
   if (!shapeId) {
-    console.log(`[Shape Segment] No shape_id for trip ${tripId}`);
+    log(`[Shape Segment] No shape_id for trip ${tripId}`);
     return null;
   }
 
   const shapePoints = shapeIdToPoints.get(shapeId);
   if (!shapePoints || shapePoints.length === 0) {
-    console.log(`[Shape Segment] No points found for shape ${shapeId}`);
+    log(`[Shape Segment] No points found for shape ${shapeId}`);
     return null;
   }
 
   const stopTimes = stopTimesIndex.get(tripId);
   if (!stopTimes) {
-    console.log(`[Shape Segment] No stop_times for trip ${tripId}`);
+    log(`[Shape Segment] No stop_times for trip ${tripId}`);
     return null;
   }
 
@@ -697,7 +699,7 @@ export function getShapeSegment(
   const toStop = stopTimes.find((s) => s.stop_id === toStopId);
 
   if (!fromStop || !toStop) {
-    console.log(`[Shape Segment] Stop IDs not found in trip ${tripId}`);
+    log(`[Shape Segment] Stop IDs not found in trip ${tripId}`);
     return null;
   }
 
@@ -705,7 +707,7 @@ export function getShapeSegment(
   const toSeq = toStop.stop_sequence;
 
   if (fromSeq >= toSeq) {
-    console.log(`[Shape Segment] Invalid sequence range: ${fromSeq} >= ${toSeq}`);
+    log(`[Shape Segment] Invalid sequence range: ${fromSeq} >= ${toSeq}`);
     return null;
   }
 
@@ -714,7 +716,7 @@ export function getShapeSegment(
   );
 
   if (slicedPoints.length < 2) {
-    console.log(`[Shape Segment] Not enough shape points after slice`);
+    log(`[Shape Segment] Not enough shape points after slice`);
     return null;
   }
 
@@ -739,7 +741,7 @@ export function getShapeSegment(
 
   shapeSegmentCache.set(cacheKey, result);
 
-  console.log(
+  log(
     `[Shape Segment] SUCCESS: ${tripId} -> ${coordinates.length} points, ${durationMinutes} mins`
   );
 
