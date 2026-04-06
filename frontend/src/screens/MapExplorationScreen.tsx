@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, ScrollView } from "react-native";
 import * as Location from "expo-location";
 import { lookupDestination, searchStations, calculateRoute } from "../services/api";
-import { ApiResponse, Coordinate, Waypoint, RouteSegment, RouteStrategy, RouteResult, TransportType } from "../types";
+import { ApiResponse, Coordinate, Waypoint, RouteSegment, RouteStrategy, FailedLeg, RouteResult, TransportType } from "../types";
 import MapComponent from "../components/MapComponent";
 import { mapExplorationStyles as styles } from "../styles/mapExploration";
 
@@ -36,7 +36,7 @@ export const MapExplorationScreen: React.FC = () => {
   const [departureTime, setDepartureTime] = useState<string>(nowAsTimeString());
   const [searchResults, setSearchResults] = useState<StationSearchResult[]>([]);
   const [strategy, setStrategy] = useState<RouteStrategy>("car");
-  const [routeSegments, setRouteSegments] = useState<RouteSegment[]>([]);
+  const [routeSegments, setRouteSegments] = useState<(RouteSegment | FailedLeg)[]>([]);
   const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,8 +103,6 @@ export const MapExplorationScreen: React.FC = () => {
         type: s.type,
         name: s.name,
       }));
-
-      console.log("Waypoints being sent :" , JSON.stringify(waypoints.map(w=> ({name: w.name, type: w.type}))));
 
       const response: ApiResponse<RouteResult> = await calculateRoute(
         origin,
@@ -216,7 +214,7 @@ export const MapExplorationScreen: React.FC = () => {
         <View style={{ flex: 1 }}>
           <MapComponent
             markers={getMarkers()}
-            routeSegments={routeSegments}
+            routeSegments={routeSegments.filter(s => s.type !== "failed") as RouteSegment[]}
             onMapClick={({ lat, lng }) => {
               addStop({ lat, lng }, "Picked location", "place");
               setShowMap(true);
@@ -246,7 +244,7 @@ export const MapExplorationScreen: React.FC = () => {
           </View>
 
           <Text style={{ marginBottom: 8, color: "#666", fontSize: 12 }}>
-            {strategy === "car" && "Driving route only"}
+            {strategy === "car" && "Driving route with optional station stops for mixed mode."}
             {strategy === "ptv" && "Mix stations + places — station→station is PTV, everything else drives"}
           </Text>
 
@@ -369,6 +367,17 @@ export const MapExplorationScreen: React.FC = () => {
                   ))}
                 </>
               )}
+            </View>
+          )}
+
+          {routeSegments.some(s => s.type === "failed") && (
+            <View style={[styles.resultBox]}>
+              <Text style={styles.resultLabel}>Some legs failed to calculate:</Text>
+              {routeSegments.filter(s => s.type === "failed").map((s, i) => (
+                <Text key={i} style={styles.resultValue}>
+                 No route: {(s as FailedLeg).from} → {(s as FailedLeg).to}
+                </Text>
+              ))}
             </View>
           )}
 
