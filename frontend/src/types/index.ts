@@ -16,15 +16,22 @@ export interface Waypoint {
 }
 
 export interface RouteSegment {
-  type: "car" | "ptv";
+  type: "car" | "ptv" ;
   coordinates: number[][];
   color: string;
   distance?: number;
   duration?: number;
 }
 
+export interface FailedLeg {
+  type: "failed";
+  from: string;
+  to: string;
+}
+
+
 export interface RouteResult {
-  segments: RouteSegment[];
+  segments: (RouteSegment | FailedLeg)[];
   totalDistance: number;
   totalDuration: number;
   estimatedArrival?: string;

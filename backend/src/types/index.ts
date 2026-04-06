@@ -3,7 +3,7 @@ export interface Coordinate {
   lng: number;
 }
 
-export type RouteStrategy = "car" | "ptv";
+export type RouteStrategy = "car" | "ptv" ;
 
 export type TransportType = "tram" | "train" | "bus";
 
@@ -22,15 +22,21 @@ export interface RoutePlan {
 }
 
 export interface RouteSegment {
-  type: "car" | "ptv";
+  type: "car" | "ptv" | "failed";
   coordinates: number[][];
   color: string;
   distance?: number;
   duration?: number;
 }
 
+export interface FailedLeg {
+  type: "failed";
+  from: string;
+  to: string;
+}
+
 export interface RouteResult {
-  segments: RouteSegment[];
+  segments: (RouteSegment | FailedLeg)[];
   totalDistance: number;
   totalDuration: number;
   estimatedArrival?: string;
