@@ -1,9 +1,11 @@
 import { Router, Request, Response } from "express";
-import { ApiResponse, Coordinate, RouteSegment, RouteResult, RouteStrategy, Waypoint } from "../types";
+import { ApiResponse, Coordinate, RouteSegment, RouteResult, RouteStrategy, Waypoint, FailedLeg } from "../types";
 import { calculateDistance, lookupDestinationAny, osrmRoute, getPTVRoute } from "../services/route-map.service";
 import { getAllStops, TransportType } from "../services/gtfs-stop-indexservice";
 import { findDeparturesForWaypoints } from "../services/gtfs-timetable.service";
 import { searchStreets, nearbyStreets } from "../services/street-data.service";
+
+const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
 
 const router = Router();
 
@@ -152,7 +154,7 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       ? (departureTime.split(":").length === 2 ? departureTime + ":00" : departureTime)
       : `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:00`;
 
-    const segments: RouteSegment[] = [];
+    const segments: (RouteSegment | FailedLeg)[] = [];
     let totalDistance = 0;
     let totalDuration = 0;
 
@@ -193,15 +195,17 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
 
         if (from.type === "station" && to.type === "station") {
           // PTV leg between consecutive stations
-          console.log(`[Route Calc] PTV: "${from.name}" -> "${to.name}"`);
+          log(`[Route Calc] PTV: "${from.name}" -> "${to.name}"`);
           const ptv = getPTVRoute(from.position, to.position, from.name, to.name);
           if (!ptv) {
-            return res.status(400).json({
-              success: false,
-              error: `No PTV route found between "${from.name}" and "${to.name}". Check these stations have a direct connection.`,
-              timestamp: new Date().toISOString(),
+            segments.push({
+              type: "failed",
+              from: from.name,
+              to: to.name,
             });
+            continue;
           }
+
           const dist = calculateDistance(from.position, to.position);
           segments.push({
             type: "ptv",
@@ -222,7 +226,7 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
           currentTime = `${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}:00`;
         } else {
           // Car leg: drive between any non-station-to-station pair
-          console.log(`[Route Calc] Car: "${from.name}" -> "${to.name}"`);
+          log(`[Route Calc] Car: "${from.name}" -> "${to.name}"`);
           const car = await osrmRoute(from.position, to.position);
           segments.push({
             type: "car",
@@ -256,7 +260,8 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       data: result,
       timestamp: new Date().toISOString(),
     };
-    res.json(response);
+    const hasFailures = segments.some((s) => s.type === "failed");
+    res.status(hasFailures ? 207 : 200).json(response);
   } catch (error) {
     res.status(500).json({
       success: false,
