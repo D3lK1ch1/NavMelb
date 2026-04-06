@@ -42,15 +42,6 @@ function createParser(buffer: Buffer) {
   });
 }
 
-function parseGtfsTime(time: string): number {
-  if (!time || time.length < 5) return 0;
-  const parts = time.split(":").map(Number);
-  const h = isNaN(parts[0]) ? 0 : parts[0];
-  const m = isNaN(parts[1]) ? 0 : parts[1];
-  const s = isNaN(parts[2]) ? 0 : parts[2];
-  return h * 3600 + m * 60 + s;
-}
-
 export async function* streamStopsFromZip(
   zipPath: string
 ): AsyncGenerator<StreamStop, void, undefined> {
