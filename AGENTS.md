@@ -112,7 +112,7 @@ This markdown is used throughout all projects, as rules and regulations to proje
   - [ ] Distance calculation accuracy
   - [ ] Error recovery from API failures
 - [x] API service - axios client configured correctly:
-  - [x] API_BASE_URL points to backend (http://192.168.0.103:8081/api/map)
+  - [x] API_BASE_URL points to backend 
   - [ ] Timeout handling (10s timeout configured, needs validation)
   - [ ] Retry logic for failed requests
   - [ ] Network error handling
@@ -186,7 +186,7 @@ When implementing features:
   - Fixed tile layer URL typo
   - Fixed {showMap} to conditional render with &&
   - Restructured layout: map above control panel
-  - Updated API_BASE_URL to http://192.168.0.103:8081/api/map
+  - Updated API_BASE_URL 
 - **Testing Results**: Map renders on Expo Go, search queries now reach backend (404 errors resolved)
 - **Next Steps**: Add WebView onError handler, test markers injection, validate distance calculations
 
