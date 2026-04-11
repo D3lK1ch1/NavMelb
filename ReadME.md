@@ -1,61 +1,135 @@
-# Mobile Navigation App 
+# NavMelb
 
-Combining best of Apple (traffic light configuration) and Google map features (path finding)
-Can drive to station or which station has parking or else walking. Combination of driving + PTV for best route, knowing which station has parking. App has traffic lights established + lane to turn to.
+A multimodal navigation app for Melbourne — combines car and public transport into a single chained journey. Built as a learning project to explore routing algorithms, GTFS timetable data, and mobile-first maps.
 
-Need-to-know: Due to using React Expo, making it a mobile navigation app, the code is tested purely through Android or IOS, unable to render the map in web.
+## Description
 
-# Getting Started
+NavMelb is a mobile app showing the map, with buttons on the UI to choose where the user is now, choose between car or PTV to start routing, with Stations to search for the various stations according to the data stored for this map that will build the route between starting point and destination, allowing multiple waypoints and transport switch instead of choosing either / or with car and PTV.
 
-After either forking or cloning the repo, run `npm install` to install all dependencies.
+Built with a Node.js backend for geocoding, RAPTOR based algorithm to calculaate pathways while running with GTFS data and a React Expo frontend working only on mobile to show the leaflet map.
 
-At backend, run:
+---
 
-npm run dev
+## Current Features
 
-At frontend remember to install Expo Go on phone and scan the QR code to test the app, then run:
+- **Multimodal waypoint chaining** — mix car and PTV legs across any number of stops; station-to-station pairs route via GTFS timetable, everything else drives via OSRM
+- **Partial route failure handling** — if one leg has no route, successful legs still display and the broken leg is flagged inline (HTTP 207)
+- **Station search** — search GTFS stops by name and transport type (train / tram / bus), with route names and display names returned
+- **Address geocoding** — place lookup via Nominatim, throttled and cached, bounded to Melbourne
+- **Real GTFS travel times** — departure times computed from timetable data, threaded through each leg of a multi-stop journey
+- **Raptor routing** — custom streaming Raptor implementation for multi-leg transit routing; falls back to timetable lookup if deadline exceeded
+- **Map visualisation** — route segments rendered on Leaflet (OpenStreetMap) via WebView in Expo
 
-npx expo start --lan
+---
 
-**Every time before testing on a physical device**, check your machine's current local IP — DHCP can reassign it between sessions:
+## Built With
 
+| Layer | Technology |
+|-------|-----------|
+| Mobile frontend | React Native (Expo) |
+| Map rendering | Leaflet + OpenStreetMap (WebView) |
+| Backend | Node.js + Express + TypeScript |
+| Car routing | OSRM (public demo server) |
+| Transit routing | GTFS Schedule + custom Raptor implementation |
+| Geocoding | Nominatim (OpenStreetMap) |
+| Transit data | Victorian GTFS feeds (data.vic.gov.au) |
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js (v18+)
+- npm
+- [Expo Go](https://expo.dev/go) installed on an Android or iOS device
+- GTFS Schedule data (see below)
+
+### Installation
+
+1. Clone the repository and install dependencies:
+
+```bash
+git clone <repo-url>
+cd NavMelb
+cd backend && npm install
+cd ../frontend && npm install
 ```
+
+2. **GTFS data** — not committed due to file size. Download from:
+
+   > https://discover.data.vic.gov.au/dataset/gtfs-schedule
+
+   Extract each feed zip into `backend/gtfs/` using this folder structure:
+
+   | Folder | Feed | Transport type |
+   |--------|------|---------------|
+   | `1/google_transit.zip` | Metropolitan Train | Train |
+   | `2/google_transit.zip` | Regional Train | Train |
+   | `3/google_transit.zip` | Tram | Tram |
+   | `4/google_transit.zip` | Bus | Bus |
+   | `5/google_transit.zip` | Bus | Bus |
+   | `6/google_transit.zip` | Bus | Bus |
+   | `10/google_transit.zip` | Train | Train |
+   | `11/google_transit.zip` | Bus | Bus |
+
+3. Start the backend:
+
+```bash
+cd backend
+npm run dev
+```
+
+4. **Before testing on a physical device** — DHCP can reassign your machine's local IP between sessions. Check it each time:
+
+```bash
 ipconfig | findstr "IPv4"
 ```
 
-Update `frontend/.env` with the result:
+Update `frontend/.env`:
 
 ```
 EXPO_PUBLIC_API_BASE_URL=http://<YOUR_CURRENT_IP>:3000/api/map
 ```
 
-If you skip this step and the IP has changed, all API calls from the app will silently time out after 10 seconds — the backend will appear healthy but the phone cannot reach it.
+If you skip this and the IP has changed, all API calls will silently time out after 10 seconds. The backend will appear healthy but the phone cannot reach it.
 
-Need-to-know: remote error with gtfs folder because of large file size limit. If location search does not work due to large file size, add on your own from url: https://discover.data.vic.gov.au/dataset/gtfs-schedule
+5. Start the frontend:
 
-## Features:
-* Combination of PTV with car / Uber as a route than either-or aka Multi-modal routing(Important) > Adding multiple stops for routing (Done with waypoint chaining)
-> Ensuring that markers are added on screen rather than just coordinates (Both worked)
-> Ensuring that distance is also visualized between place on screen (worked)
- * Real GTFS travel times with actual departure times from timetable (fixed)
- * Station filtering by searching transport types (stated when searched)
- * Multi - destination (searching more than two places between start and destination)
+```bash
+cd frontend
+npx expo start --lan
+```
 
--------------------------------------
-[Optional, once done]
-* Making sure that stations have car parks for the car
-* Lane tracking (Google Maps) with traffic light (Apple Maps)
-* Walking paths to be less confusing because it is hard to know where to walk in shopping centres / uni campus
+Scan the QR code with Expo Go on your device.
 
-## Configurations
-* Frontend (Mobile) = React Native - find one good for both Apple and Android
-* Mapping SDK = OSM (using free versions) aka Leaflet too
-* Backend = Node.js + Express (for route calc, data aggregation, parking and ~~PTV API~~ GTFS (PTV) + Raptor [for real time PTV routing instead of fallback straight line])
+> Note: This app uses React Native with Expo and cannot be rendered in a browser due to the WebView-based map component.
+
+---
+
+## Usage
+To add on once sure of the quality.
+---
+
+## Roadmap
+
+-[ ] Replace OSRM public demo with self-hosted instance or OpenRouteService
+-[ ] Replace Raptor + GTFS with PTV API — swap point is `getPTVRoute()` in `route-map.service.ts`
+-[ ] Add CORS origin for production domain in `app.ts`
+-[ ] Fix `findStopByName` in `raptor-core.ts` — sort results by proximity to Melbourne CBD
+-[ ] Wire timetable fallback when Raptor deadline is exceeded
+-[ ] Create `journey-chain.service.ts` + `/journey/chain` endpoint
+-[ ] Waypoint list: add move up/down per-row buttons
 
 
-## Constraints
-* Completely in TS/JS, for the web development portion of the works. Other languages must integrate well with JS in the case of databases.
-* Followiing  Google Map and Apple Map samples aka Maps JavaScript API and Mapkit JS API respectively as base.
-* Using GTFS + Raptor (Round-bAsed Public Transmit Optimized Router - algorithm behind Google Maps' transmit directions) instead of PTV API, to test routing algorithm over production mode for now.
+**Optional / longer term:**
+-[ ] Station parking availability lookup
+-[ ] Lane tracking and traffic light configuration
+-[ ] Walking path detail inside complex venues (shopping centres, campuses)
+-[ ] GTFS-Realtime integration for live delay overlays
 
-Tech stack is in work while the navigation app is iteratively integrated, as features are being implemented one by one.
+---
+
+## License
+
+TBD
