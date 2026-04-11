@@ -108,25 +108,27 @@ Scan the QR code with Expo Go on your device.
 ---
 
 ## Usage
+
 To add on once sure of the quality.
+
 ---
 
 ## Roadmap
 
--[ ] Replace OSRM public demo with self-hosted instance or OpenRouteService
--[ ] Replace Raptor + GTFS with PTV API — swap point is `getPTVRoute()` in `route-map.service.ts`
--[ ] Add CORS origin for production domain in `app.ts`
--[ ] Fix `findStopByName` in `raptor-core.ts` — sort results by proximity to Melbourne CBD
--[ ] Wire timetable fallback when Raptor deadline is exceeded
--[ ] Create `journey-chain.service.ts` + `/journey/chain` endpoint
--[ ] Waypoint list: add move up/down per-row buttons
+- [ ] Replace OSRM public demo with self-hosted instance or OpenRouteService
+- [ ] Replace Raptor + GTFS with PTV API — swap point is `getPTVRoute()` in `route-map.service.ts`
+- [ ] Add CORS origin for production domain in `app.ts`
+- [ ] Fix `findStopByName` in `raptor-core.ts` — sort results by proximity to Melbourne CBD
+- [ ] Wire timetable fallback when Raptor deadline is exceeded
+- [ ] Create `journey-chain.service.ts` + `/journey/chain` endpoint
+- [ ] Waypoint list: add move up/down per-row buttons
 
 
 **Optional / longer term:**
--[ ] Station parking availability lookup
--[ ] Lane tracking and traffic light configuration
--[ ] Walking path detail inside complex venues (shopping centres, campuses)
--[ ] GTFS-Realtime integration for live delay overlays
+- [ ] Station parking availability lookup
+- [ ] Lane tracking and traffic light configuration
+- [ ] Walking path detail inside complex venues (shopping centres, campuses)
+- [ ] GTFS-Realtime integration for live delay overlays
 
 ---
 
