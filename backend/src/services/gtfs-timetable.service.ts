@@ -416,8 +416,7 @@ export function getNextDepartureTime(stationName: string): { time: string; waitM
         .sort((a, b) => a.stop_sequence - b.stop_sequence);
 
       for (const st of stationTimes) {
-        const [hours, minutes, seconds] = st.departure_time.split(":").map(Number);
-        const departureSeconds = hours * 3600 + minutes * 60 + seconds;
+        const departureSeconds = parseGtfsTime(st.departure_time);
 
         if (departureSeconds > currentTime) {
           const waitSeconds = departureSeconds - currentTime;
@@ -585,12 +584,6 @@ export function getTripBetweenStations(
 
   log(`[PTV Route] FAIL: No transfer journey found`);
   return null;
-}
-
-//Check time in map, and see what is affected.
-function timeToSeconds(time: string): number {
-  const [hours, minutes, seconds] = time.split(":").map(Number);
-  return hours * 3600 + minutes * 60 + seconds;
 }
 
 function parseGtfsTime(time: string): number {
