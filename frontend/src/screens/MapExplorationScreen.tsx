@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, ScrollView } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform } from "react-native";
 import * as Location from "expo-location";
 import { lookupDestination, searchStations, calculateRoute } from "../services/api";
 import { ApiResponse, Coordinate, Waypoint, RouteSegment, RouteStrategy, FailedLeg, RouteResult, TransportType } from "../types";
@@ -200,7 +200,8 @@ export const MapExplorationScreen: React.FC = () => {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}>
       {showMap && (
         <View style={{ flex: 1 }}>
           <MapComponent
@@ -378,6 +379,6 @@ export const MapExplorationScreen: React.FC = () => {
           </View>
         </ScrollView>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 };
