@@ -9,9 +9,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 - `backend/tsconfig.json` — minor config adjustments
-- `frontend/.env` — local IP updated for device testing
 
 ---
+
+## [0.8.0] - 2026-04-17 - UI Refactoring
+- `MapExplorationScreen.tsx` — strategy is now derived from the stops chain instead of a manual `useState`; `"ptv"` if any stop at index > 0 is a station, otherwise `"car"` — eliminates the class of bug where strategy could drift out of sync with the waypoint list
+- `MapExplorationScreen.tsx` — removed Car / PTV strategy toggle buttons; replaced with a contextual hint line under the Place / Station search mode toggle explaining routing implications of each mode
 
 ## [0.7.0] — 2026-04-07 — Beta Hardening
 
