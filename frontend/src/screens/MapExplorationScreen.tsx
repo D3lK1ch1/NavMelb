@@ -35,7 +35,6 @@ export const MapExplorationScreen: React.FC = () => {
   const [stops, setStops] = useState<JourneyStop[]>([]);
   const [departureTime, setDepartureTime] = useState<string>(nowAsTimeString());
   const [searchResults, setSearchResults] = useState<StationSearchResult[]>([]);
-  const [strategy, setStrategy] = useState<RouteStrategy>("car");
   const [routeSegments, setRouteSegments] = useState<(RouteSegment | FailedLeg)[]>([]);
   const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -44,6 +43,7 @@ export const MapExplorationScreen: React.FC = () => {
   const [searchMode, setSearchMode] = useState<"place" | "station">("place");
   const [transportFilter] = useState<"tram" | "train" | "bus" | undefined>(undefined);
   const requestGenRef = useRef(0);
+  const stratergy: RouteStrategy = stops.some((stop, i) => i > 0 && stop.type === "station") ? "ptv" : "car";
 
   const addStop = (coord: Coordinate, name: string, type: "place" | "station") => {
     setStops((prev) => [...prev, { coord, name, type }]);
@@ -89,15 +89,6 @@ export const MapExplorationScreen: React.FC = () => {
       const origin = stops[0].coord;
       const destination = stops[stops.length - 1].coord;
 
-      const stationStops = stops.filter((s) => s.type === "station");
-
-      if (strategy === "ptv" && stationStops.length < 1) {
-        if (requestGenRef.current === myGeneration) {
-          setError("PTV routing requires at least one station stop, and then add a consecutive station for PTV routing.");
-        }
-        return;
-      }
-
       const waypoints: Waypoint[] = stops.map((s) => ({
         position: s.coord,
         type: s.type,
@@ -107,7 +98,7 @@ export const MapExplorationScreen: React.FC = () => {
       const response: ApiResponse<RouteResult> = await calculateRoute(
         origin,
         destination,
-        strategy,
+        stratergy,
         waypoints,
         departureTime
       );
@@ -133,7 +124,7 @@ export const MapExplorationScreen: React.FC = () => {
         setLoading(false);
       }
     }
-  }, [stops, strategy, departureTime]);
+  }, [stops, stratergy, departureTime]);
 
   useEffect(() => {
     if (stops.length >= 2) {
@@ -142,7 +133,7 @@ export const MapExplorationScreen: React.FC = () => {
       setRouteResult(null);
       setRouteSegments([]);
     }
-  }, [stops, strategy, departureTime, calculateRoutePreview]);
+  }, [stops, stratergy, departureTime, calculateRoutePreview]);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
@@ -227,27 +218,6 @@ export const MapExplorationScreen: React.FC = () => {
         <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
           <Text style={styles.title}>NavMelb</Text>
 
-          {/* Strategy selector */}
-          <View style={styles.routeTypeContainer}>
-            <TouchableOpacity
-              style={[styles.routeTypeButton, strategy === "car" && styles.routeTypeActive]}
-              onPress={() => setStrategy("car")}
-            >
-              <Text style={styles.routeTypeText}>Car</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.routeTypeButton, strategy === "ptv" && styles.routeTypeActive]}
-              onPress={() => setStrategy("ptv")}
-            >
-              <Text style={styles.routeTypeText}>PTV</Text>
-            </TouchableOpacity>
-          </View>
-
-          <Text style={{ marginBottom: 8, color: "#666", fontSize: 12 }}>
-            {strategy === "car" && "Driving route with optional station stops for mixed mode."}
-            {strategy === "ptv" && "Mix stations + places — station→station is PTV, everything else drives"}
-          </Text>
-
           {/* Departure time input */}
           <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
             <Text style={{ marginRight: 8, color: "#444", fontSize: 13 }}>Depart at:</Text>
@@ -293,6 +263,12 @@ export const MapExplorationScreen: React.FC = () => {
               {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Add</Text>}
             </TouchableOpacity>
           </View>
+
+          {/* Strategy hint */}
+          <Text style={{ marginBottom: 8, color: "#666", fontSize: 12 }}>
+            {searchMode === "place" && "Driving route, even if station -> place so check station button."}
+            {searchMode === "station" && "Only station ->  Station will activate PTV."}
+          </Text>
 
           {/* Station search results */}
           {searchResults.length > 0 && (
