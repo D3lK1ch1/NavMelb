@@ -29,7 +29,7 @@ Built with a Node.js backend for geocoding, RAPTOR based algorithm to calculaate
 | Mobile frontend | React Native (Expo) |
 | Map rendering | Leaflet + OpenStreetMap (WebView) |
 | Backend | Node.js + Express + TypeScript |
-| Car routing | OSRM (public demo server) |
+| Car routing | OSRM (self-hosted via Docker) |
 | Transit routing | GTFS Schedule + custom Raptor implementation |
 | Geocoding | Nominatim (OpenStreetMap) |
 | Transit data | Victorian GTFS feeds (data.vic.gov.au) |
@@ -44,6 +44,7 @@ Built with a Node.js backend for geocoding, RAPTOR based algorithm to calculaate
 - npm
 - [Expo Go](https://expo.dev/go) installed on an Android or iOS device
 - GTFS Schedule data (see below)
+- Docker Desktop (for self-hosted OSRM)
 
 ### Installation
 
@@ -73,14 +74,40 @@ cd ../frontend && npm install
    | `10/google_transit.zip` | Train | Train |
    | `11/google_transit.zip` | Bus | Bus |
 
-3. Start the backend:
+3. **OSRM routing data** — not committed due to file size.
+
+   Download an OSM extract for Australia or Victoria:
+   > https://download.geofabrik.de/australia-oceania.html
+
+   Save the `.osm.pbf` file into `osrm-data/`. Then pre-process (run once — takes 5–15 min depending on extract size):
+
+   ```bash
+   docker run -t -v "C:/path/to/NavMelb/osrm-data:/data" osrm/osrm-backend osrm-extract -p /opt/car.lua /data/<filename>.osm.pbf
+   docker run -t -v "C:/path/to/NavMelb/osrm-data:/data" osrm/osrm-backend osrm-partition /data/<filename>.osrm
+   docker run -t -v "C:/path/to/NavMelb/osrm-data:/data" osrm/osrm-backend osrm-customize /data/<filename>.osrm
+   ```
+
+   Start the OSRM server (run this each session, before the backend):
+
+   ```bash
+   docker run -t -i -p 5000:5000 -v "C:/path/to/NavMelb/osrm-data:/data" osrm/osrm-backend osrm-routed --algorithm mld /data/<filename>.osrm
+   ```
+
+   Add to `backend/.env`:
+   ```
+   OSRM_URL=http://localhost:5000
+   ```
+
+   > If OSRM is not running, the backend falls back to straight-line Haversine distance automatically.
+
+4. Start the backend:
 
 ```bash
 cd backend
 npm run dev
 ```
 
-4. **Before testing on a physical device** — DHCP can reassign your machine's local IP between sessions. Check it each time:
+5. **Before testing on a physical device** — DHCP can reassign your machine's local IP between sessions. Check it each time:
 
 ```bash
 ipconfig | findstr "IPv4"
@@ -94,11 +121,11 @@ EXPO_PUBLIC_API_BASE_URL=http://<YOUR_CURRENT_IP>:3000/api/map
 
 If you skip this and the IP has changed, all API calls will silently time out after 10 seconds. The backend will appear healthy but the phone cannot reach it.
 
-5. Start the frontend:
+6. Start the frontend:
 
 ```bash
 cd frontend
-npx expo start --lan
+npx expo start --lan --clear
 ```
 
 Scan the QR code with Expo Go on your device.
@@ -115,13 +142,12 @@ To add on once sure of the quality.
 
 ## Roadmap
 
-- [ ] Replace OSRM public demo with self-hosted instance or OpenRouteService
 - [ ] Replace Raptor + GTFS with PTV API — swap point is `getPTVRoute()` in `route-map.service.ts`
-- [ ] Add CORS origin for production domain in `app.ts`
+- [x] Add CORS origin for production domain in `app.ts`
 - [ ] Fix `findStopByName` in `raptor-core.ts` — sort results by proximity to Melbourne CBD
 - [ ] Wire timetable fallback when Raptor deadline is exceeded
 - [ ] Create `journey-chain.service.ts` + `/journey/chain` endpoint
-- [ ] Waypoint list: add move up/down per-row buttons
+- [x] Waypoint list: add move up/down per-row buttons
 
 
 **Optional / longer term:**
