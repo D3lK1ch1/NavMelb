@@ -35,7 +35,8 @@ export async function osrmRoute(
   ];
   const coordString = coords.map((c) => c.join(",")).join(";");
 
-  const url = `https://router.project-osrm.org/route/v1/driving/${coordString}?geometries=geojson&overview=full`;
+  const base = process.env.OSRM_URL ?? "http://localhost:5000";
+  const url = `${base}/route/v1/driving/${coordString}?geometries=geojson&overview=full`;
 
   try {
     const response = await axios.get(url, { timeout: 10000 });
