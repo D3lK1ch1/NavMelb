@@ -53,6 +53,15 @@ export const MapExplorationScreen: React.FC = () => {
     setStops((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const moveStop = (from: number, to: number) => {
+    setStops((prev) => {
+      const next = [...prev];
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return next;
+    });
+  };
+
   const handleUseMyLocation = async () => {
     try {
       setLoading(true);
@@ -306,6 +315,16 @@ export const MapExplorationScreen: React.FC = () => {
                   <TouchableOpacity onPress={() => removeStop(i)} style={{ paddingHorizontal: 6 }}>
                     <Text style={{ color: "red", fontSize: 14 }}>✕</Text>
                   </TouchableOpacity>
+                    {i > 0 && (
+                      <TouchableOpacity onPress={() => moveStop(i, i - 1)}>
+                        <Text>↑</Text>
+                      </TouchableOpacity>
+                    )}
+                    {i < stops.length - 1 && (
+                      <TouchableOpacity onPress={() => moveStop(i, i + 1)}>
+                        <Text>↓</Text>
+                      </TouchableOpacity>
+                    )}
                 </View>
               ))}
               {stops.length < 2 && (
