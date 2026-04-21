@@ -1,3 +1,4 @@
+import { distanceMeters } from "./gtfs-stop-indexservice";
 import { StreamStop, StreamStopTime, StreamTrip } from "./gtfs-stream.service";
 
 const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
@@ -162,23 +163,39 @@ export class RaptorCore {
    * Find a stop by normalized name. Prefers stops that have actual trips
    * (i.e. platform stops) over parent station nodes that have no trips.
    */
+
   findStopByName(normalizedQuery: string): RaptorStop | undefined {
+    const candidates : RaptorStop[] = [];
+    const CBD = {lat: -37.8136, lng: 144.9631};
+
     // Pass 0: exact name match with trips — highest confidence.
     for (let idx = 0; idx < this.stops.length; idx++) {
       if (this.stopNormalizedNames[idx] === normalizedQuery) {
         if (this.stopIdxToTripIdxs.has(idx)) {
-          return this.stops[idx];
+          candidates.push(this.stops[idx]);
         }
       }
     }
+
+    if (candidates.length > 0){
+      candidates.sort((a, b) => distanceMeters(a, CBD) - distanceMeters(b, CBD));
+      return candidates[0]; 
+    }
+
     // Pass 1: partial match with trips.
     for (let idx = 0; idx < this.stops.length; idx++) {
       if (this.stopNormalizedNames[idx].includes(normalizedQuery)) {
         if (this.stopIdxToTripIdxs.has(idx)) {
-          return this.stops[idx];
+          candidates.push(this.stops[idx]);
         }
       }
     }
+
+    if (candidates.length > 0){
+      candidates.sort((a, b) => distanceMeters(a, CBD) - distanceMeters(b, CBD));
+      return candidates[0]; 
+    }
+
     // Pass 2: exact match with no trips (edge case).
     for (let idx = 0; idx < this.stops.length; idx++) {
       if (this.stopNormalizedNames[idx] === normalizedQuery) {
