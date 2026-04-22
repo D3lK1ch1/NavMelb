@@ -3,12 +3,23 @@
 All notable changes to NavMelb are recorded here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+
 ---
 
-## [Unreleased]
+## [0.9.0] — 2026-04-22 — Infrastructure: Self-Hosted OSRM
 
 ### Changed
-- `backend/tsconfig.json` — minor config adjustments
+- OSRM routing switched from `router.project-osrm.org` (public demo, no SLA) to self-hosted Docker instance — coordinates never leave local infra, no rate limits
+- `route-map.service.ts` line 38: OSRM base URL now read from `OSRM_URL` env var; fallback `http://localhost:5000`
+
+### Added
+- `docker-compose.yml` — starts OSRM (MLD algorithm, `osrm-data/` volume) + backend together via `docker compose up --build`
+- `backend/Dockerfile` — two-stage build
+- `backend/.env.example`, `frontend/.env.example` — template env files for new installs
+- `set-local-ip.js` — detects LAN IP, writes into both `.env` files; run whenever DHCP reassigns
+
+### Investigated (no code change)
+- Southern Cross stop resolution — root cause confirmed: `findStopByName` returns V/Line regional platform over metro; CBD proximity sort (added 2026-04-19) is current mitigation; full fix superseded by pending PTV API swap
 
 ---
 
