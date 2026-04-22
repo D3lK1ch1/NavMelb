@@ -79,7 +79,7 @@ cd ../frontend && npm install
    Download an OSM extract for Australia or Victoria:
    > https://download.geofabrik.de/australia-oceania.html
 
-   Save the `.osm.pbf` file into `osrm-data/`. Then pre-process (run once — takes 5–15 min depending on extract size):
+   Save the `.osm.pbf` file into `osrm-data/`. Then pre-process (run once — takes 5–15 min):
 
    ```bash
    docker run -t -v "C:/path/to/NavMelb/osrm-data:/data" osrm/osrm-backend osrm-extract -p /opt/car.lua /data/<filename>.osm.pbf
@@ -87,39 +87,42 @@ cd ../frontend && npm install
    docker run -t -v "C:/path/to/NavMelb/osrm-data:/data" osrm/osrm-backend osrm-customize /data/<filename>.osrm
    ```
 
-   Start the OSRM server (run this each session, before the backend):
+   > Pre-processing is a one-time step. The processed files stay in `osrm-data/` and are reused on every subsequent start.
+
+4. **Environment setup** — copy the example files and fill in your local IP:
 
    ```bash
-   docker run -t -i -p 5000:5000 -v "C:/path/to/NavMelb/osrm-data:/data" osrm/osrm-backend osrm-routed --algorithm mld /data/<filename>.osrm
+   cp backend/.env.example backend/.env
+   cp frontend/.env.example frontend/.env
    ```
 
-   Add to `backend/.env`:
+   Then run the IP detection script (repeat this whenever DHCP reassigns your machine's IP):
+
+   ```bash
+   node set-local-ip.js
    ```
-   OSRM_URL=http://localhost:5000
+
+   This detects your current LAN IP and writes it into both `.env` files automatically. If you skip this and the IP has changed, all API calls will silently time out after 10 seconds.
+
+5. **Start the backend and OSRM together:**
+
+   ```bash
+   docker compose up --build
    ```
+
+   This starts both the OSRM routing server and the Node.js backend in one command. The backend is available on port `3000`; OSRM on port `5000`.
 
    > If OSRM is not running, the backend falls back to straight-line Haversine distance automatically.
 
-4. Start the backend:
+   **Alternative — local dev without Docker:**
 
-```bash
-cd backend
-npm run dev
-```
+   ```bash
+   # Terminal 1: start OSRM manually
+   docker run -t -i -p 5000:5000 -v "C:/path/to/NavMelb/osrm-data:/data" osrm/osrm-backend osrm-routed --algorithm mld /data/<filename>.osrm
 
-5. **Before testing on a physical device** — DHCP can reassign your machine's local IP between sessions. Check it each time:
-
-```bash
-ipconfig | findstr "IPv4"
-```
-
-Update `frontend/.env`:
-
-```
-EXPO_PUBLIC_API_BASE_URL=http://<YOUR_CURRENT_IP>:3000/api/map
-```
-
-If you skip this and the IP has changed, all API calls will silently time out after 10 seconds. The backend will appear healthy but the phone cannot reach it.
+   # Terminal 2: start backend in dev mode (hot reload)
+   cd backend && npm run dev
+   ```
 
 6. Start the frontend:
 
@@ -144,7 +147,7 @@ To add on once sure of the quality.
 
 - [ ] Replace Raptor + GTFS with PTV API — swap point is `getPTVRoute()` in `route-map.service.ts`
 - [x] Add CORS origin for production domain in `app.ts`
-- [ ] Fix `findStopByName` in `raptor-core.ts` — sort results by proximity to Melbourne CBD
+- [x] Fix `findStopByName` in `raptor-core.ts` — proximity sort to Melbourne CBD added 2026-04-19; full fix superseded by PTV API swap
 - [ ] Wire timetable fallback when Raptor deadline is exceeded
 - [ ] Create `journey-chain.service.ts` + `/journey/chain` endpoint
 - [x] Waypoint list: add move up/down per-row buttons
