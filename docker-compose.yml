@@ -1,0 +1,25 @@
+services:
+  osrm:
+    image: osrm/osrm-backend
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./osrm-data:/data
+    command: osrm-routed --algorithm mld /data/australia-oceania-260419.osrm
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "3000:3000"
+    environment:
+      - OSRM_URL=http://osrm:5000
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:8081}
+      - GTFS_ROOT=/gtfs
+      - NODE_ENV=production
+    volumes:
+      - ./gtfs:/gtfs:ro
+    depends_on:
+      - osrm
+    restart: unless-stopped
