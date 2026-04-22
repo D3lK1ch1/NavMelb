@@ -5,6 +5,9 @@ node_modules/
 # GTFS data files (large, downloaded separately)
 gtfs/
 
+# OSRM-data files (large, generated separately)
+osrm-data/
+
 #Build outputs
 dist/
 build/
