@@ -1,11 +1,41 @@
 services:
+  osrm-init:
+    image: osrm/osrm-backend
+    volumes:
+      - ./osrm-data:/data
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        PBF=$$(ls /data/*.osm.pbf 2>/dev/null | head -1)
+        if [ -z "$$PBF" ]; then
+          echo "ERROR: No .osm.pbf file found in osrm-data/."
+          echo "Download one from https://download.geofabrik.de/australia-oceania.html and save it to osrm-data/"
+          exit 1
+        fi
+        BASE=$$(echo "$$PBF" | sed 's/\.osm\.pbf//')
+        if [ -f "$${BASE}.osrm" ]; then
+          echo "OSRM data already pre-processed — skipping."
+          exit 0
+        fi
+        echo "Pre-processing OSRM data (one-time step, 5–15 min)..."
+        osrm-extract -p /opt/car.lua "$$PBF" && \
+        osrm-partition "$${BASE}.osrm" && \
+        osrm-customize "$${BASE}.osrm"
+
   osrm:
     image: osrm/osrm-backend
     ports:
       - "5000:5000"
     volumes:
       - ./osrm-data:/data
-    command: osrm-routed --algorithm mld /data/australia-oceania-260419.osrm
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        OSRM=$$(ls /data/*.osrm 2>/dev/null | head -1)
+        exec osrm-routed --algorithm mld "$$OSRM"
+    depends_on:
+      osrm-init:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   backend:

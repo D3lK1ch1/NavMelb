@@ -79,15 +79,7 @@ cd ../frontend && npm install
    Download an OSM extract for Australia or Victoria:
    > https://download.geofabrik.de/australia-oceania.html
 
-   Save the `.osm.pbf` file into `osrm-data/`. Then pre-process (run once — takes 5–15 min):
-
-   ```bash
-   docker run -t -v "C:/path/to/NavMelb/osrm-data:/data" osrm/osrm-backend osrm-extract -p /opt/car.lua /data/<filename>.osm.pbf
-   docker run -t -v "C:/path/to/NavMelb/osrm-data:/data" osrm/osrm-backend osrm-partition /data/<filename>.osrm
-   docker run -t -v "C:/path/to/NavMelb/osrm-data:/data" osrm/osrm-backend osrm-customize /data/<filename>.osrm
-   ```
-
-   > Pre-processing is a one-time step. The processed files stay in `osrm-data/` and are reused on every subsequent start.
+   Save the `.osm.pbf` file into `osrm-data/` (any filename is fine). Pre-processing runs automatically the first time you start the stack — no extra commands needed.
 
 4. **Environment setup** — copy the example files and fill in your local IP:
 
@@ -114,13 +106,13 @@ cd ../frontend && npm install
 
    > If OSRM is not running, the backend falls back to straight-line Haversine distance automatically.
 
-   **Alternative — local dev without Docker:**
+   **Alternative — backend hot reload:**
 
    ```bash
-   # Terminal 1: start OSRM manually
-   docker run -t -i -p 5000:5000 -v "C:/path/to/NavMelb/osrm-data:/data" osrm/osrm-backend osrm-routed --algorithm mld /data/<filename>.osrm
+   # Terminal 1: start OSRM only
+   docker compose up osrm
 
-   # Terminal 2: start backend in dev mode (hot reload)
+   # Terminal 2: backend with hot reload
    cd backend && npm run dev
    ```
 
@@ -146,11 +138,8 @@ To add on once sure of the quality.
 ## Roadmap
 
 - [ ] Replace Raptor + GTFS with PTV API — swap point is `getPTVRoute()` in `route-map.service.ts`
-- [x] Add CORS origin for production domain in `app.ts`
-- [x] Fix `findStopByName` in `raptor-core.ts` — proximity sort to Melbourne CBD added 2026-04-19; full fix superseded by PTV API swap
 - [ ] Wire timetable fallback when Raptor deadline is exceeded
 - [ ] Create `journey-chain.service.ts` + `/journey/chain` endpoint
-- [x] Waypoint list: add move up/down per-row buttons
 
 
 **Optional / longer term:**
