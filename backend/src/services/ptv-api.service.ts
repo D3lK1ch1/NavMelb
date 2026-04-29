@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from "axios";
+import crypto from "node:crypto";
 
 export interface Coordinate {
   lat: number;
@@ -60,6 +61,20 @@ function getClient(): AxiosInstance {
         "X-API-Key": apiKey,
       },
       timeout: 10000,
+    });
+
+    client.interceptors.request.use((config) => {
+      const url = new URL(config.url || "", baseUrl);
+      const params = new URLSearchParams(url.search);
+      params.set("devid", devId);
+      const basePath = new URL(baseUrl).pathname; // "/v3"
+      const pathWithParams = `${basePath}${config.url}?${params.toString()}`;
+      const signature = crypto
+        .createHmac("sha1", apiKey)
+        .update(pathWithParams)
+        .digest("hex").toUpperCase();
+      config.params = { ...config.params, signature };
+      return config;
     });
   }
   return client;
