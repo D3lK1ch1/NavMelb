@@ -37,10 +37,18 @@ export interface PTvPatternGeometry {
   runRef: string;
   routeId: number;
   routeType: number;
+  stops: Array<{ stopId: number; stopSequence: number }>;
   geometry: number[][];
 }
 
+export interface PTvRouteResult {
+  geometry: number[][];
+  durationSeconds: number;
+  platformNumber?: string;
+}
+
 const baseUrl = "https://timetableapi.ptv.vic.gov.au/v3";
+const AVG_DWELL_SECONDS = 90;
 
 let devId = "";
 let apiKey = "";
@@ -60,20 +68,31 @@ function getClient(): AxiosInstance {
         "X-Developer-Id": devId,
         "X-API-Key": apiKey,
       },
-      timeout: 10000,
+      timeout: 30000,
     });
 
     client.interceptors.request.use((config) => {
-      const url = new URL(config.url || "", baseUrl);
-      const params = new URLSearchParams(url.search);
-      params.set("devid", devId);
-      const basePath = new URL(baseUrl).pathname; // "/v3"
-      const pathWithParams = `${basePath}${config.url}?${params.toString()}`;
+      const basePath = new URL(baseUrl).pathname;
+
+      const allParams: Record<string, string | number> = {
+        devid: devId,
+        ...(config.params || {}),
+      };
+
+      const sortedKeys = Object.keys(allParams).sort();
+      const queryStringWithoutSig = sortedKeys
+        .map((k) => `${k}=${encodeURIComponent(String(allParams[k]))}`)
+        .join("&");
+
+      const pathWithParams = `${basePath}${config.url}?${queryStringWithoutSig}`;
       const signature = crypto
         .createHmac("sha1", apiKey)
         .update(pathWithParams)
         .digest("hex").toUpperCase();
-      config.params = { ...config.params, signature };
+
+      config.url = `${config.url}?${queryStringWithoutSig}&signature=${signature}`;
+      config.params = undefined;
+
       return config;
     });
   }
@@ -84,22 +103,37 @@ function normalizeQuery(query: string): string {
   return query.toLowerCase().trim().replace(/\s+/g, " ");
 }
 
+function pickBestStop(
+  stops: Array<{ stopId: number; displayName: string; routeType: number[] }>,
+  routeType: number
+): { stopId: number; displayName: string } | null {
+  const matching = stops.filter((s) => s.routeType.includes(routeType));
+  if (!matching.length) return null;
+
+  const stationFirst = matching.find((s) =>
+    /railway station|station\b/i.test(s.displayName)
+  );
+  const pick = stationFirst ?? matching[0];
+
+  return { stopId: pick.stopId, displayName: pick.displayName };
+}
+
 export async function ptvSearchStops(
   query: string
-): Promise<{ position: Coordinate; stopId: number; displayName: string, routeTypes: number[]}[]> {
+): Promise<{ position: Coordinate; stopId: number; displayName: string, routeType: number[]}[]> {
   const normalized = normalizeQuery(query);
   if (!normalized) return [];
 
   const c = getClient();
   const response = await c.get<{
-    stops: Array<{ stop_id: number; stop_name: string; stop_lat: number; stop_lng: number , route_types?: number[]}>;
+    stops: Array<{ stop_id: number; stop_name: string; stop_latitude: number; stop_longitude: number , route_type?: number}>;
   }>(`/search/${encodeURIComponent(normalized)}`);
 
   return response.data.stops.map((s) => ({
     stopId: s.stop_id,
-    position: { lat: s.stop_lat, lng: s.stop_lng },
+    position: { lat: s.stop_latitude, lng: s.stop_longitude },
     displayName: s.stop_name,
-    routeTypes: s.route_types ?? [],
+    routeType: s.route_type !== undefined ? [s.route_type] : [],
   }));
 }
 
@@ -147,41 +181,112 @@ export async function ptvGetDirections(routeId: number): Promise<PTVDirection[]>
   return response.data.directions;
 }
 
-export async function ptvGetPatternGeometry(
+export async function ptvGetPatternWithStops(
   routeType: number,
   runRef: string
 ): Promise<PTvPatternGeometry | null> {
   const c = getClient();
   const response = await c.get<{
-    patterns: Array<{
+    departures: Array<{
+      stop_id: number;
+      departure_sequence: number;
       run_ref: string;
       route_id: number;
       route_type: number;
-      geopath: Array<{ lat: number; lon: number }>;
     }>;
-  }>(`/pattern`, {
-    params: { run_ref: runRef, include_geopath: "true" },
-  });
+  }>(`/pattern/run/${runRef}/route_type/${routeType}`);
 
-  const pattern = response.data.patterns?.[0];
-  if (!pattern) return null;
+  const departures = response.data.departures;
+  if (!departures?.length) return null;
 
-return {
-    runRef: pattern.run_ref,
-    routeId: pattern.route_id,
-    routeType: pattern.route_type,
-    geometry: pattern.geopath.map((p) => [p.lat, p.lon]),
+  return {
+    runRef,
+    routeId: departures[0].route_id,
+    routeType: departures[0].route_type,
+    stops: departures.map((d) => ({
+      stopId: d.stop_id,
+      stopSequence: d.departure_sequence,
+    })),
+    geometry: [],
   };
 }
 
+export async function ptvFindRouteBetweenStops(
+  fromStationName: string,
+  toStationName: string,
+  routeType: number
+): Promise<PTvRouteResult | null> {
+  console.log(`[PTV Route] Step 1: Searching origin "${fromStationName}" (routeType=${routeType})`);
+  const originStops = await ptvSearchStops(fromStationName);
+  console.log(`[PTV Route] Found ${originStops.length} stops for origin`);
+  const origin = pickBestStop(originStops, routeType);
+  if (!origin) {
+    console.log(`[PTV Route] FAIL: No matching stop for origin (routeType=${routeType})`);
+    return null;
+  }
+  console.log(`[PTV Route] Origin: stopId=${origin.stopId} name="${origin.displayName}"`);
+
+  console.log(`[PTV Route] Step 2: Searching destination "${toStationName}"`);
+  const destStops = await ptvSearchStops(toStationName);
+  console.log(`[PTV Route] Found ${destStops.length} stops for destination`);
+  const dest = pickBestStop(destStops, routeType);
+  if (!dest) {
+    console.log(`[PTV Route] FAIL: No matching stop for destination (routeType=${routeType})`);
+    return null;
+  }
+  console.log(`[PTV Route] Destination: stopId=${dest.stopId} name="${dest.displayName}"`);
+
+  console.log(`[PTV Route] Step 3: Getting departures from origin stopId=${origin.stopId}`);
+  const departures = (await ptvGetDepartures(routeType, origin.stopId)).slice(0, 5);
+  if (!departures.length) {
+    console.log(`[PTV Route] FAIL: No departures from origin stop`);
+    return null;
+  }
+  console.log(`[PTV Route] Got ${departures.length} departures`);
+
+  // Step 4: For each departure, check if destination stop_id is in the pattern
+  for (const dep of departures) {
+    console.log(`[PTV Route] Step 4: Checking runRef=${dep.runRef}`);
+    const pattern = await ptvGetPatternWithStops(routeType, dep.runRef);
+    if (!pattern) {
+      console.log(`[PTV Route]  No pattern for runRef=${dep.runRef}`);
+      continue;
+    }
+    console.log(`[PTV Route]  Pattern has ${pattern.stops.length} stops`);
+
+    const originIdx = pattern.stops.findIndex((s) => s.stopId === origin.stopId);
+    const destIdx = pattern.stops.findIndex((s) => s.stopId === dest.stopId);
+    console.log(`[PTV Route]  originIdx=${originIdx} destIdx=${destIdx}`);
+
+    if (originIdx !== -1 && destIdx !== -1 && destIdx > originIdx) {
+      const seqDiff = pattern.stops[destIdx].stopSequence - pattern.stops[originIdx].stopSequence;
+      const durationSeconds = seqDiff * AVG_DWELL_SECONDS;
+
+      console.log(`[PTV Route] SUCCESS: ${seqDiff} stops, ~${Math.round(durationSeconds/60)}min`);
+      return {
+        geometry: [],
+        durationSeconds,
+        platformNumber: dep.platformNumber,
+      };
+    }
+  }
+
+  console.log(`[PTV Route] FAIL: No departure pattern includes destination`);
+  return null;
+}
+
 export async function ptvFindStopByName(
-  name: string
+  name: string,
+  routeType = 0
 ): Promise<{ stopId: number; stopName: string; position: Coordinate } | null> {
   const results = await ptvSearchStops(name);
   if (!results.length) return null;
+  const best = pickBestStop(results, routeType);
+  if (!best) return null;
+  const match = results.find((r) => r.stopId === best.stopId)!;
   return {
-    stopId: results[0].stopId,
-    stopName: results[0].displayName,
-    position: results[0].position,
+    stopId: best.stopId,
+    stopName: best.displayName,
+    position: match.position,
   };
 }

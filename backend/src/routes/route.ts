@@ -1,8 +1,7 @@
 import { Router, Request, Response } from "express";
-import { ApiResponse, Coordinate, RouteSegment, RouteResult, RouteStrategy, Waypoint, FailedLeg } from "../types";
+import { ApiResponse, Coordinate, RouteSegment, RouteResult, RouteStrategy, Waypoint, FailedLeg, TransportType, DepartureInfo } from "../types";
 import { calculateDistance, lookupDestinationAny, osrmRoute, getPTVRoute } from "../services/route-map.service";
-import { getAllStops, TransportType } from "../services/gtfs-stop-indexservice";
-import { findDeparturesForWaypoints } from "../services/gtfs-timetable.service";
+import { ptvSearchStops, ptvGetDepartures, ptvFindStopByName } from "../services/ptv-api.service";
 import { searchStreets, nearbyStreets } from "../services/street-data.service";
 
 const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
@@ -79,7 +78,7 @@ router.post("/distance", (req: Request, res: Response) => {
   }
 });
 
-router.get("/stations/search", (req: Request, res: Response) => {
+router.get("/stations/search", async (req: Request, res: Response) => {
   try {
     const { query, limit, transportType } = req.query;
 
@@ -91,21 +90,15 @@ router.get("/stations/search", (req: Request, res: Response) => {
       });
     }
 
-    let stops = getAllStops();
-    if (transportType && ["tram", "train", "bus"].includes(transportType as string)) {
-      stops = stops.filter((s) => s.transportTypes.includes(transportType as TransportType));
-    }
+    const ptvStops = await ptvSearchStops(query as string);
 
-    const normalizedQuery = (query as string)
-      .toLowerCase()
-      .trim()
-      .replace(/\bstation\b/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    const results = stops
-      .filter((s) => s.name.includes(normalizedQuery))
-      .slice(0, Number(limit) || 50);
+    const results = ptvStops
+      .slice(0, Number(limit) || 50)
+      .map((s) => ({
+        name: s.displayName,
+        position: s.position,
+        transportTypes: s.routeType?.length ? s.routeType.map((t) => (["train", "tram", "bus"][t]) as TransportType) : (["train"] as TransportType[]),
+      }));
 
     const response: ApiResponse<{ name: string; position: Coordinate; transportTypes: TransportType[] }[]> = {
       success: true,
@@ -189,15 +182,18 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
 
       let currentTime = resolvedDeparture;
 
+      log(`[Route Calc] Strategy: ptv, waypoints: ${stationStops.length} station(s)`);
+      log(`[Route Calc] All points:`, allPoints.map((p) => `${p.type}:${p.name}`).join(" -> "));
+
       for (let i = 0; i < allPoints.length - 1; i++) {
         const from = allPoints[i];
         const to = allPoints[i + 1];
 
         if (from.type === "station" && to.type === "station") {
-          // PTV leg between consecutive stations
-          log(`[Route Calc] PTV: "${from.name}" -> "${to.name}"`);
-          const ptv = getPTVRoute(from.position, to.position, from.name, to.name);
+          log(`[Route Calc] Leg ${i + 1}: PTV "${from.name}" -> "${to.name}"`);
+          const ptv = await getPTVRoute(from.position, to.position, from.name, to.name);
           if (!ptv) {
+            log(`[Route Calc] Leg ${i + 1}: FAILED`);
             segments.push({
               type: "failed",
               from: from.name,
@@ -206,6 +202,7 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
             continue;
           }
 
+          log(`[Route Calc] Leg ${i + 1}: SUCCESS ${Math.round(ptv.duration / 60)}min, ${ptv.geometry.length} points`);
           const dist = calculateDistance(from.position, to.position);
           segments.push({
             type: "ptv",
@@ -217,7 +214,6 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
           totalDistance += dist;
           totalDuration += ptv.duration;
 
-          // Advance current time for departure info accuracy
           const parts = currentTime.split(":").map(Number);
           const baseSec = parts[0] * 3600 + parts[1] * 60 + (parts[2] || 0);
           const nextSec = baseSec + Math.round(ptv.duration);
@@ -225,9 +221,9 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
           const nm = Math.floor((nextSec % 3600) / 60);
           currentTime = `${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}:00`;
         } else {
-          // Car leg: drive between any non-station-to-station pair
-          log(`[Route Calc] Car: "${from.name}" -> "${to.name}"`);
+          log(`[Route Calc] Leg ${i + 1}: Car "${from.name}" -> "${to.name}"`);
           const car = await osrmRoute(from.position, to.position);
+          log(`[Route Calc] Leg ${i + 1}: Car ${Math.round(car.distance)}m, ${Math.round(car.duration)}s`);
           segments.push({
             type: "car",
             coordinates: car.geometry,
@@ -239,11 +235,32 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
           totalDuration += car.duration;
         }
       }
+
+      log(`[Route Calc] Result: ${segments.length} legs, ${Math.round(totalDistance / 1000)}km, ${Math.round(totalDuration / 60)}min`);
     }
 
     const departureInfo = strategy !== "car"
-      ? findDeparturesForWaypoints(waypoints || [])
-      : undefined;
+      ? (await Promise.all(
+          (waypoints || [])
+            .filter((w) => w.type === "station" && w.name)
+            .map(async (w) => {
+              const stopInfo = await ptvFindStopByName(w.name!);
+              if (!stopInfo) return null;
+              const deps = await ptvGetDepartures(0, stopInfo.stopId, { limit: 1 });
+              if (!deps.length) return null;
+              const firstDep = deps[0];
+              const scheduled = new Date(firstDep.scheduledDepartureUtc);
+              const now = new Date();
+              const waitMs = scheduled.getTime() - now.getTime();
+              const waitMinutes = Math.max(0, Math.ceil(waitMs / 60000));
+              return {
+                stationName: w.name!,
+                nextDeparture: firstDep.scheduledDepartureUtc,
+                waitTimeMinutes: waitMinutes,
+              };
+            })
+          )).filter((d): d is DepartureInfo => d !== null)
+         : undefined;
 
     const arrivalTime = new Date(Date.now() + totalDuration * 1000);
 
@@ -263,6 +280,7 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
     const hasFailures = segments.some((s) => s.type === "failed");
     res.status(hasFailures ? 207 : 200).json(response);
   } catch (error) {
+    console.error(error);
     res.status(500).json({
       success: false,
       error: "Failed to calculate route",
