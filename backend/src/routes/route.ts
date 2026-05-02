@@ -80,7 +80,7 @@ router.post("/distance", (req: Request, res: Response) => {
 
 router.get("/stations/search", async (req: Request, res: Response) => {
   try {
-    const { query, limit, transportType } = req.query;
+    const {query, limit, transportType} = req.query;
 
     if (!query) {
       return res.status(400).json({
@@ -94,6 +94,18 @@ router.get("/stations/search", async (req: Request, res: Response) => {
 
     const results = ptvStops
       .slice(0, Number(limit) || 50)
+      .filter((s) => {
+        if (transportType) {
+          if (transportType === "train") {
+            return s.routeType.includes(0);
+          } else if (transportType === "tram") {
+            return s.routeType.includes(1);
+          } else if (transportType === "bus") {
+            return s.routeType.includes(2);
+          }
+        }
+        return true;
+      })
       .map((s) => ({
         name: s.displayName,
         position: s.position,
