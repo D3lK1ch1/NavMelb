@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, vi } from "vitest";
 import request from "supertest";
 import type { Express } from "express";
 import { createTestApp } from "../helpers/create-app";
+import { ptvFindRouteBetweenStops, ptvFindStopByName, ptvGetDepartures } from "../../services/ptv-api.service";
 
 // Mock axios for OSRM calls
 vi.mock("axios", () => ({
@@ -30,6 +31,22 @@ vi.mock("axios", () => ({
     }),
   },
 }));
+
+vi.mock("../../services/ptv-api.service", () => ({
+  ptvSearchStops: vi.fn(async () => []),
+  ptvFindRouteBetweenStops: vi.fn(async () => {
+    return {
+      geometry: [
+          [144.9631, -37.8136],
+          [144.9671, -37.8183],
+        ],
+      durationSeconds: 180,
+    };
+  }),
+  ptvGetDepartures: vi.fn(async () => []),
+  ptvFindStopByName: vi.fn(async () => null),
+}));
+
 
 const origin = { lat: -37.8136, lng: 144.9631 };
 const destination = { lat: -37.8235, lng: 144.9898 };
