@@ -6,6 +6,30 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.10.0] — 2026-05-02 — PTV-Only Architecture + Test Infrastructure
+
+### Changed
+- **RAPTOR + GTFS removed from startup** — server boots instantly (~750MB RAM saved, ~60s startup eliminated); PTV API is now the sole transit data source
+- `index.ts` — removed `loadGtfsStops()`, `loadGtfsTimetables()`, `loadRaptorStreaming()`, `loadRouteAssociations()` on startup
+- `route-map.service.ts` — removed RAPTOR branch and GTFS fallback; `getPTVRoute()` calls PTV API only
+- `ptv-api.service.ts` — full rewrite: `ptvGetPatternWithStops()` reads correct `departures[]` shape; `/pattern` endpoint uses path params (`/run/{run_ref}/route_type/{route_type}`); `ptvFindStopByName` uses `pickBestStop()`; timeout raised to 30s
+- `route.ts` `/stations/search` — `transportType` filter now applied (was read from query but unused); filter order: `map → filter → slice` so `limit` applies to filtered set
+
+### Added
+- Geometry straight-line fallback in `getPTVRoute()` — when PTV returns no geopath, falls back to `[[fromLat, fromLng], [toLat, toLng]]` so the segment still renders
+- PTV service mocks in acceptance tests — `station-search.test.ts` and `route-calculate.test.ts` now mock `ptv-api.service` so CI runs without PTV credentials
+
+### Fixed
+- `getNextDepartureTime()` in `gtfs-timetable.service.ts` — was returning inside the inner loop on first match; now collects `best` across all trips and returns after loop (Sprint 3 bug)
+- `MapComponent.tsx` — `onLoadEnd` callback added to WebView; postMessages were firing while WebView was still loading and being dropped; map now always receives route data after load completes
+- `routeType` number mapping in `/stations/search` — `0=train`, `1=tram`, `2=bus`; previous filter had train and tram swapped
+
+### Removed
+- RAPTOR + GTFS fallback path from `getPTVRoute()` — PTV API only; archived in session notes for revert
+- `getAllStops` import from `route.ts` — was unused after GTFS removal
+
+---
+
 ## [0.9.0] — 2026-04-22 — Infrastructure: Self-Hosted OSRM
 
 ### Changed
@@ -26,6 +50,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [0.8.0] - 2026-04-17 - UI Refactoring
 - `MapExplorationScreen.tsx` — strategy is now derived from the stops chain instead of a manual `useState`; `"ptv"` if any stop at index > 0 is a station, otherwise `"car"` — eliminates the class of bug where strategy could drift out of sync with the waypoint list
 - `MapExplorationScreen.tsx` — removed Car / PTV strategy toggle buttons; replaced with a contextual hint line under the Place / Station search mode toggle explaining routing implications of each mode
+- KeyboardAvoidingView wrap in MapExplorationScreen.tsx
 
 ## [0.7.0] — 2026-04-07 — Beta Hardening
 
@@ -50,11 +75,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 - CORS restriction in `app.ts` — locked to `["http://localhost:8081", "http://localhost:3000"]` (previously open)
 - `frontend/.env` rule documented: only URLs live there, never secrets; future API keys go in `backend/.env` only
-
-### Decided (architecture)
 - Map tap → uses exact coordinates; OSRM car fallback if no GTFS stop resolved (already implemented in `route.ts` lines 223–236)
 - Failed leg behaviour → show successful legs, flag broken leg inline (implemented in 0.7.0)
-- Waypoint mutability → full reorder, remove, reverse (post-beta)
+- Waypoint mutability → full reorder, remove, reverse (implemented in 0.8.0)
 
 ---
 
