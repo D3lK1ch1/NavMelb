@@ -1,7 +1,33 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, vi } from "vitest";
 import request from "supertest";
 import type { Express } from "express";
 import { createTestApp } from "../helpers/create-app";
+import { ptvFindStopByName, ptvGetDepartures, ptvSearchStops } from "../../services/ptv-api.service";
+
+vi.mock("../../services/ptv-api.service", () => ({
+  ptvSearchStops: vi.fn(async () => [
+    {
+      displayName: "Flinders Street Station",
+      position: { lat: -37.8183, lng: 144.9671 },
+      routeType: [0],
+    },
+  ]),
+  ptvGetDepartures: vi.fn(async () => []),
+  ptvFindStopByName: vi.fn(async () => null),
+}));
+
+vi.mock("../../services/ptv-api.service", () => ({
+  ptvSearchStops: vi.fn(async () => [
+    {
+      displayName: "Fliders Street Station",
+      position: { lat: -37.8183, lng: 144.9671 },
+      routeType: [1],
+    },
+  ]),
+  ptvGetDepartures: vi.fn(async () => []),
+  ptvFindStopByName: vi.fn(async () => null),
+}));
+
 
 describe("GET /api/map/stations/search", () => {
   let app: Express;
