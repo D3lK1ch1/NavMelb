@@ -194,7 +194,10 @@ export async function ptvGetPatternWithStops(
       route_id: number;
       route_type: number;
     }>;
-  }>(`/pattern/run/${runRef}/route_type/${routeType}`);
+    stops: Record<string, unknown>;
+  }>(`/pattern/run/${runRef}/route_type/${routeType}`, {params: {expand : "stop"}});
+
+  console.log("[PTV expand] stops", JSON.stringify(response.data.stops, null, 2));
 
   const departures = response.data.departures;
   if (!departures?.length) return null;
@@ -253,6 +256,8 @@ export async function ptvFindRouteBetweenStops(
       continue;
     }
     console.log(`[PTV Route]  Pattern has ${pattern.stops.length} stops`);
+    console.log(`[PTV Route]  origin.stopId=${origin.stopId} dest.stopId=${dest.stopId} 
+    patternStops=${JSON.stringify(pattern.stops.slice(0, 5).map(s => s.stopId))}`);
 
     const originIdx = pattern.stops.findIndex((s) => s.stopId === origin.stopId);
     const destIdx = pattern.stops.findIndex((s) => s.stopId === dest.stopId);
