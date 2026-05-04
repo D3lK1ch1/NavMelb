@@ -57,7 +57,7 @@ export default function MapComponent({
   const map = L.map('map').setView([${center[0]}, ${center[1]}], ${zoom});
 
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors'
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(map);
 
   let markersLayer = L.layerGroup().addTo(map);
@@ -183,6 +183,11 @@ export default function MapComponent({
         source={{ html: leafletHtml }}
         javaScriptEnabled
         domStorageEnabled
+        onLoadEnd={() => {
+          webViewRef.current?.postMessage(JSON.stringify({ type: "updateMarkers", markers }));
+          webViewRef.current?.postMessage(JSON.stringify({ type: "updateWaypoints", waypoints }));
+          webViewRef.current?.postMessage(JSON.stringify({ type: "updateRouteSegments", routeSegments }));
+        }}
         onMessage={(event) => {
           try {
             const data = JSON.parse(event.nativeEvent.data);
