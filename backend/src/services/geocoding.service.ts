@@ -42,7 +42,7 @@ export async function geocodeAddress(query: string): Promise<Coordinate | null> 
         addressdetails: 0,
         limit: 1,
         countrycodes: "au",
-        viewbox: "144.5,-37.5,145.5,-37.5",
+        viewbox: "144.5,-38.2,145.7,-37.5",
         bounded: 1,
       },
       headers: {
