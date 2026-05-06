@@ -92,9 +92,7 @@ router.get("/stations/search", async (req: Request, res: Response) => {
 
     const ptvStops = await ptvSearchStops(query as string);
 
-    const results = ptvStops
-      .slice(0, Number(limit) || 50)
-      .filter((s) => {
+    const filtered = ptvStops.filter((s) => {
         if (transportType) {
           if (transportType === "train") {
             return s.routeType.includes(0);
@@ -105,19 +103,24 @@ router.get("/stations/search", async (req: Request, res: Response) => {
           }
         }
         return true;
-      })
+      });
+
+    const pageLimit = Number(limit) || 50;
+    const results = filtered
+      .slice(0, pageLimit)
       .map((s) => ({
         name: s.displayName,
         position: s.position,
         transportTypes: s.routeType?.length ? s.routeType.map((t) => (["train", "tram", "bus"][t]) as TransportType) : (["train"] as TransportType[]),
       }));
 
-    const response: ApiResponse<{ name: string; position: Coordinate; transportTypes: TransportType[] }[]> = {
+    res.json({
       success: true,
       data: results,
+      total: filtered.length,
+      truncated: filtered.length > pageLimit,
       timestamp: new Date().toISOString(),
-    };
-    res.json(response);
+    });
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -276,12 +279,15 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
 
     const arrivalTime = new Date(Date.now() + totalDuration * 1000);
 
+    const failedLegsCount = segments.filter((s) => s.type === "failed").length;
+
     const result: RouteResult = {
       segments,
       totalDistance,
       totalDuration,
       estimatedArrival: arrivalTime.toISOString(),
       departureInfo: departureInfo?.length ? departureInfo : undefined,
+      failedLegs: failedLegsCount,
     };
 
     const response: ApiResponse<RouteResult> = {
@@ -289,7 +295,7 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       data: result,
       timestamp: new Date().toISOString(),
     };
-    const hasFailures = segments.some((s) => s.type === "failed");
+    const hasFailures = failedLegsCount > 0;
     res.status(hasFailures ? 207 : 200).json(response);
   } catch (error) {
     console.error(error);
@@ -313,11 +319,15 @@ router.get("/streets/search", (req: Request, res: Response) => {
       });
     }
 
-    const results = searchStreets(query as string, Number(limit) || 20);
+    const streetLimit = Number(limit) || 20;
+    const allStreets = searchStreets(query as string, Infinity);
+    const results = allStreets.slice(0, streetLimit);
 
     res.json({
       success: true,
       data: results,
+      total: allStreets.length,
+      truncated: allStreets.length > streetLimit,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -341,15 +351,19 @@ router.get("/streets/nearby", (req: Request, res: Response) => {
       });
     }
 
-    const results = nearbyStreets(
+    const nearbyLimit = Number(limit) || 20;
+    const allNearby = nearbyStreets(
       { lat: Number(lat), lng: Number(lng) },
       Number(radius) || 200,
-      Number(limit) || 20,
+      Infinity,
     );
+    const results = allNearby.slice(0, nearbyLimit);
 
     res.json({
       success: true,
       data: results,
+      total: allNearby.length,
+      truncated: allNearby.length > nearbyLimit,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
