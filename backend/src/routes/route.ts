@@ -1,12 +1,43 @@
 import { Router, Request, Response } from "express";
-import { ApiResponse, Coordinate, RouteSegment, RouteResult, RouteStrategy, Waypoint, FailedLeg, TransportType, DepartureInfo } from "../types";
-import { calculateDistance, lookupDestinationAny, osrmRoute, getPTVRoute } from "../services/route-map.service";
+import { ApiResponse, Coordinate, RouteResult, RouteStrategy, Waypoint, DepartureInfo, TransportType } from "../types";
+import { calculateDistance, lookupDestinationAny } from "../services/route-map.service";
 import { ptvSearchStops, ptvGetDepartures, ptvFindStopByName } from "../services/ptv-api.service";
 import { searchStreets, nearbyStreets } from "../services/street-data.service";
+import { IRouteStrategy, RouteCommand } from "../strategies/types";
+import { CarStrategy } from "../strategies/car.strategy";
+import { PtvStrategy, PtvValidationError } from "../strategies/ptv.strategy";
 
 const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
 
 const router = Router();
+
+const strategies: Record<RouteStrategy, IRouteStrategy> = {
+  car: new CarStrategy(),
+  ptv: new PtvStrategy(),
+};
+
+async function fetchDepartureInfo(waypoints: Waypoint[]): Promise<DepartureInfo[]> {
+  const stationWaypoints = waypoints.filter((w) => w.type === "station" && w.name);
+  const results = await Promise.all(
+    stationWaypoints.map(async (w) => {
+      const stopInfo = await ptvFindStopByName(w.name!);
+      if (!stopInfo) return null;
+      const deps = await ptvGetDepartures(0, stopInfo.stopId, { limit: 1 });
+      if (!deps.length) return null;
+      const firstDep = deps[0];
+      const scheduled = new Date(firstDep.scheduledDepartureUtc);
+      const now = new Date();
+      const waitMs = scheduled.getTime() - now.getTime();
+      const waitMinutes = Math.max(0, Math.ceil(waitMs / 60000));
+      return {
+        stationName: w.name!,
+        nextDeparture: firstDep.scheduledDepartureUtc,
+        waitTimeMinutes: waitMinutes,
+      };
+    })
+  );
+  return results.filter((d): d is DepartureInfo => d !== null);
+}
 
 router.get("/destination/lookup", async (req: Request, res: Response) => {
   try {
@@ -137,6 +168,7 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       departureTime?: string;
     };
 
+    // Validate coordinates
     if (!origin || !destination || !origin.lat || !origin.lng || !destination.lat || !destination.lng) {
       return res.status(400).json({
         success: false,
@@ -145,6 +177,7 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       });
     }
 
+    // Validate strategy
     if (!strategy || !["car", "ptv"].includes(strategy)) {
       return res.status(400).json({
         success: false,
@@ -159,120 +192,20 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       ? (departureTime.split(":").length === 2 ? departureTime + ":00" : departureTime)
       : `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:00`;
 
-    const segments: (RouteSegment | FailedLeg)[] = [];
-    let totalDistance = 0;
-    let totalDuration = 0;
+    // Build command and execute strategy
+    const cmd: RouteCommand = {
+      origin,
+      destination,
+      waypoints: waypoints || [],
+      departureTime: resolvedDeparture,
+    };
 
-    if (strategy === "car") {
-      const carRoute = await osrmRoute(origin, destination, waypoints?.map((w) => w.position));
-      segments.push({
-        type: "car",
-        coordinates: carRoute.geometry,
-        color: "#2196F3",
-        distance: carRoute.distance,
-        duration: carRoute.duration,
-      });
-      totalDistance = carRoute.distance;
-      totalDuration = carRoute.duration;
+    const { segments, totalDistance, totalDuration } = await strategies[strategy].execute(cmd);
 
-    } else if (strategy === "ptv") {
-      const stationStops = (waypoints || []).filter((w) => w.type === "station");
-      if (stationStops.length < 1) {
-        return res.status(400).json({
-          success: false,
-          error: "PTV routing requires at least one station stop. Add stations to your journey chain.",
-          timestamp: new Date().toISOString(),
-        });
-      }
-
-      // Build full point list: origin + all waypoints + destination
-      const allPoints: Array<{ position: Coordinate; type: "station" | "place"; name: string }> = [
-        { position: origin, type: "place", name: "Origin" },
-        ...(waypoints || []).map((w) => ({ position: w.position, type: w.type, name: w.name || "" })),
-        { position: destination, type: "place", name: "Destination" },
-      ];
-
-      let currentTime = resolvedDeparture;
-
-      log(`[Route Calc] Strategy: ptv, waypoints: ${stationStops.length} station(s)`);
-      log(`[Route Calc] All points:`, allPoints.map((p) => `${p.type}:${p.name}`).join(" -> "));
-
-      for (let i = 0; i < allPoints.length - 1; i++) {
-        const from = allPoints[i];
-        const to = allPoints[i + 1];
-
-        if (from.type === "station" && to.type === "station") {
-          log(`[Route Calc] Leg ${i + 1}: PTV "${from.name}" -> "${to.name}"`);
-          const ptv = await getPTVRoute(from.position, to.position, from.name, to.name);
-          if (!ptv) {
-            log(`[Route Calc] Leg ${i + 1}: FAILED`);
-            segments.push({
-              type: "failed",
-              from: from.name,
-              to: to.name,
-            });
-            continue;
-          }
-
-          log(`[Route Calc] Leg ${i + 1}: SUCCESS ${Math.round(ptv.duration / 60)}min, ${ptv.geometry.length} points`);
-          const dist = calculateDistance(from.position, to.position);
-          segments.push({
-            type: "ptv",
-            coordinates: ptv.geometry,
-            color: "#F44336",
-            distance: dist,
-            duration: ptv.duration,
-          });
-          totalDistance += dist;
-          totalDuration += ptv.duration;
-
-          const parts = currentTime.split(":").map(Number);
-          const baseSec = parts[0] * 3600 + parts[1] * 60 + (parts[2] || 0);
-          const nextSec = baseSec + Math.round(ptv.duration);
-          const nh = Math.floor(nextSec / 3600) % 24;
-          const nm = Math.floor((nextSec % 3600) / 60);
-          currentTime = `${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}:00`;
-        } else {
-          log(`[Route Calc] Leg ${i + 1}: Car "${from.name}" -> "${to.name}"`);
-          const car = await osrmRoute(from.position, to.position);
-          log(`[Route Calc] Leg ${i + 1}: Car ${Math.round(car.distance)}m, ${Math.round(car.duration)}s`);
-          segments.push({
-            type: "car",
-            coordinates: car.geometry,
-            color: "#2196F3",
-            distance: car.distance,
-            duration: car.duration,
-          });
-          totalDistance += car.distance;
-          totalDuration += car.duration;
-        }
-      }
-
-      log(`[Route Calc] Result: ${segments.length} legs, ${Math.round(totalDistance / 1000)}km, ${Math.round(totalDuration / 60)}min`);
-    }
-
+    // Fetch departure info for PTV journeys
     const departureInfo = strategy !== "car"
-      ? (await Promise.all(
-          (waypoints || [])
-            .filter((w) => w.type === "station" && w.name)
-            .map(async (w) => {
-              const stopInfo = await ptvFindStopByName(w.name!);
-              if (!stopInfo) return null;
-              const deps = await ptvGetDepartures(0, stopInfo.stopId, { limit: 1 });
-              if (!deps.length) return null;
-              const firstDep = deps[0];
-              const scheduled = new Date(firstDep.scheduledDepartureUtc);
-              const now = new Date();
-              const waitMs = scheduled.getTime() - now.getTime();
-              const waitMinutes = Math.max(0, Math.ceil(waitMs / 60000));
-              return {
-                stationName: w.name!,
-                nextDeparture: firstDep.scheduledDepartureUtc,
-                waitTimeMinutes: waitMinutes,
-              };
-            })
-          )).filter((d): d is DepartureInfo => d !== null)
-         : undefined;
+      ? await fetchDepartureInfo(waypoints || [])
+      : undefined;
 
     const arrivalTime = new Date(Date.now() + totalDuration * 1000);
 
@@ -292,6 +225,13 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
     const hasFailures = segments.some((s) => s.type === "failed");
     res.status(hasFailures ? 207 : 200).json(response);
   } catch (error) {
+    if (error instanceof PtvValidationError) {
+      return res.status(400).json({
+        success: false,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+    }
     console.error(error);
     res.status(500).json({
       success: false,
