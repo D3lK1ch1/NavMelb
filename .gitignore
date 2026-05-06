@@ -17,6 +17,9 @@ build/
 .expo/
 .expo-shared/
 
+# Event sink log files
+logs/
+
 #Environment variables
 .env
 .env.*
