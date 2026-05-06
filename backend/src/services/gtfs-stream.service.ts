@@ -56,16 +56,21 @@ export async function* streamStopsFromZip(
 
     const parser = createParser(entry.getData());
     for await (const row of parser) {
+      const lat = parseFloat(row.stop_lat);
+      const lon = parseFloat(row.stop_lon);
+      // Skip rows with missing or invalid coordinates — avoids phantom stops at Null Island
+      if (isNaN(lat) || isNaN(lon)) continue;
       yield {
         stop_id: row.stop_id,
         stop_name: row.stop_name,
-        stop_lat: parseFloat(row.stop_lat) || 0,
-        stop_lon: parseFloat(row.stop_lon) || 0,
+        stop_lat: lat,
+        stop_lon: lon,
         location_type: parseInt(row.location_type || "0", 10),
       };
     }
   } catch (err) {
     console.error(`[Stream] Error reading stops from ${zipPath}:`, err);
+    throw err;
   }
 }
 
@@ -91,6 +96,7 @@ export async function* streamStopTimesFromZip(
     }
   } catch (err) {
     console.error(`[Stream] Error reading stop_times from ${zipPath}:`, err);
+    throw err;
   }
 }
 
@@ -116,6 +122,7 @@ export async function* streamTripsFromZip(
     }
   } catch (err) {
     console.error(`[Stream] Error reading trips from ${zipPath}:`, err);
+    throw err;
   }
 }
 

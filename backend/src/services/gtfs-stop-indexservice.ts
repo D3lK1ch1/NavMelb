@@ -24,14 +24,19 @@ export interface StopEntry {
   stopIds: Set<string>;
 }
 
-const stopIndex = new Map<string, StopEntry>();
+let stopIndex = new Map<string, StopEntry>();
 const proximityMergeMeters = 150;
 let cachedStops: StopInfo[] | null = null;
+let gtfsLoaded = false;
 
 // stopId → unique route names (populated by loadRouteAssociations)
 const stopRouteNames = new Map<string, Set<string>>();
 
 export { distanceMeters };
+
+export function isGtfsStopsLoaded(): boolean {
+  return gtfsLoaded && stopIndex.size > 0;
+}
 
 function normalizeName(value: string): string {
   return value
@@ -72,8 +77,9 @@ export function loadGtfsStops(): void {
     .filter((d) => d.isDirectory())
     .map((d) => d.name);
 
-  stopIndex.clear();
-  cachedStops = null;
+  // Build into a local map — swap atomically once complete so concurrent
+  // requests never see a partially-populated index.
+  const newIndex = new Map<string, StopEntry>();
 
   for (const feedDir of feedDirs) {
     const zipPath = path.join(absoluteRoot, feedDir, "google_transit.zip");
@@ -105,9 +111,9 @@ export function loadGtfsStops(): void {
         continue;
       }
 
-      const existing = stopIndex.get(name);
+      const existing = newIndex.get(name);
       if (!existing) {
-        stopIndex.set(name, {
+        newIndex.set(name, {
           position: { lat, lng },
           transportTypes: new Set([transportType]),
           displayName: (row.stop_name || "").trim(),
@@ -126,6 +132,11 @@ export function loadGtfsStops(): void {
       }
     }
   }
+
+  // Atomic swap: replace the module-level reference all at once
+  stopIndex = newIndex;
+  cachedStops = null;
+  gtfsLoaded = true;
 }
 
 export async function loadRouteAssociations(): Promise<void> {
