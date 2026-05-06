@@ -4,6 +4,8 @@ import AdmZip from "adm-zip";
 import { parse } from "csv-parse";
 import { Coordinate, ShapePoint, ShapeSegmentResult } from "../types/index.js";
 import { distanceMeters } from "../utils/geo";
+import { normalizeName } from "../utils/normalize";
+import { getTransportType } from "../utils/gtfs-feed";
 
 const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
 
@@ -108,25 +110,6 @@ const transferGraph = new Map<string, TransferStation[]>();
 const transferCache = new Map<string, TransferJourney | null>();
 
 export { transferGraph };
-
-function normalizeName(value: string): string {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/\bstation\b/g, "")
-    .replace(/\brailway\b/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function getTransportType(feedDir: string): "train" | "tram" | "bus" {
-  const folderNum = feedDir.replace(/\D/g, "");
-  if (["1", "2", "10"].includes(folderNum)) return "train";
-  if (["3"].includes(folderNum)) return "tram";
-  return "bus";
-}
-
 
 function buildTransferGraph(): void {
   transferGraph.clear();

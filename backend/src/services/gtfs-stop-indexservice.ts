@@ -5,6 +5,8 @@ import { parse } from "csv-parse/sync";
 import { Coordinate } from "../types";
 import { distanceMeters } from "../utils/geo";
 import { streamStopTimesFromZip } from "./gtfs-stream.service";
+import { normalizeName } from "../utils/normalize";
+import { getTransportType } from "../utils/gtfs-feed";
 
 const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
 
@@ -32,32 +34,6 @@ let cachedStops: StopInfo[] | null = null;
 const stopRouteNames = new Map<string, Set<string>>();
 
 export { distanceMeters };
-
-function normalizeName(value: string): string {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/\bstation\b/g, "")
-    .replace(/\brailway\b/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function getTransportType(feedDir: string): TransportType {
-  const folderNum = feedDir.replace(/\D/g, "");
-  const mapping: Record<string, TransportType> = {
-    "1": "train",
-    "2": "train",
-    "3": "tram",
-    "4": "bus",
-    "5": "bus",
-    "6": "bus",
-    "10": "train",
-    "11": "bus",
-  };
-  return mapping[folderNum] || "bus";
-}
 
 export function loadGtfsStops(): void {
   const gtfsRoot = process.env.GTFS_ROOT || "../gtfs";

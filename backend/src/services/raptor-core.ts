@@ -1,4 +1,4 @@
-import { distanceMeters } from "./gtfs-stop-indexservice";
+import { distanceMeters } from "../utils/geo";
 import { StreamStop, StreamStopTime, StreamTrip } from "./gtfs-stream.service";
 
 const log = process.env.NODE_ENV !== "production" ? console.log : () => {};

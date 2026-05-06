@@ -4,6 +4,8 @@ import type { Express } from "express";
 import { createTestApp } from "../helpers/create-app";
 import { ptvFindStopByName, ptvGetDepartures, ptvSearchStops } from "../../services/ptv-api.service";
 
+// Single mock returning both a train stop (routeType [0]) and a tram stop (routeType [1])
+// so that all transport-type filter branches are testable.
 vi.mock("../../services/ptv-api.service", () => ({
   ptvSearchStops: vi.fn(async () => [
     {
@@ -11,16 +13,9 @@ vi.mock("../../services/ptv-api.service", () => ({
       position: { lat: -37.8183, lng: 144.9671 },
       routeType: [0],
     },
-  ]),
-  ptvGetDepartures: vi.fn(async () => []),
-  ptvFindStopByName: vi.fn(async () => null),
-}));
-
-vi.mock("../../services/ptv-api.service", () => ({
-  ptvSearchStops: vi.fn(async () => [
     {
-      displayName: "Fliders Street Station",
-      position: { lat: -37.8183, lng: 144.9671 },
+      displayName: "Flinders Street/Federation Square",
+      position: { lat: -37.8181, lng: 144.9673 },
       routeType: [1],
     },
   ]),

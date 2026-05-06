@@ -2,6 +2,8 @@ import fs from "fs";
 import path from "path";
 import { RaptorCore, RaptorJourney } from "./raptor-core";
 import { streamFeedData, StreamStop, StreamTrip, StreamStopTime } from "./gtfs-stream.service";
+import { normalizeName } from "../utils/normalize";
+import { getTransportType } from "../utils/gtfs-feed";
 
 const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
 
@@ -14,13 +16,6 @@ const gtfsData: GTFSData = {
   raptor: null,
   loaded: false,
 };
-
-function getTransportType(feedDir: string): "train" | "tram" | "bus" {
-  const folderNum = feedDir.replace(/\D/g, "");
-  if (["1", "2", "10"].includes(folderNum)) return "train";
-  if (["3"].includes(folderNum)) return "tram";
-  return "bus";
-}
 
 export interface RaptorResultJourney {
   departureTime: string;
@@ -123,21 +118,8 @@ export function queryRaptorJourney(
 
   const raptor = gtfsData.raptor!;
 
-  const fromNormalized = fromStationName
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/\bstation\b/g, "")
-    .replace(/\brailway\b/g, "")
-    .trim();
-
-  const toNormalized = toStationName
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/\bstation\b/g, "")
-    .replace(/\brailway\b/g, "")
-    .trim();
+  const fromNormalized = normalizeName(fromStationName);
+  const toNormalized = normalizeName(toStationName);
 
   const fromStop = raptor.findStopByName(fromNormalized);
   const toStop = raptor.findStopByName(toNormalized);

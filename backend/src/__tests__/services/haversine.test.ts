@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calculateDistance } from "../../services/route-map.service";
+import { distanceMeters as calculateDistance } from "../../utils/geo";
 
 describe("calculateDistance (Haversine)", () => {
   it("Melbourne CBD → St Kilda ≈ 5.5km", () => {

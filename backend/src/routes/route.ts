@@ -1,6 +1,8 @@
 import { Router, Request, Response } from "express";
 import { ApiResponse, Coordinate, RouteSegment, RouteResult, RouteStrategy, Waypoint, FailedLeg, TransportType, DepartureInfo } from "../types";
-import { calculateDistance, lookupDestinationAny, osrmRoute, getPTVRoute } from "../services/route-map.service";
+import { lookupDestinationAny, osrmRoute, getPTVRoute } from "../services/route-map.service";
+import { distanceMeters } from "../utils/geo";
+import { addSecondsToTime } from "../utils/time";
 import { ptvSearchStops, ptvGetDepartures, ptvFindStopByName } from "../services/ptv-api.service";
 import { searchStreets, nearbyStreets } from "../services/street-data.service";
 
@@ -57,7 +59,7 @@ router.post("/distance", (req: Request, res: Response) => {
       });
     }
 
-    const distance = calculateDistance(from, to);
+    const distance = distanceMeters(from, to);
 
     const response: ApiResponse<{ distance: number; distanceKm: number; unit: string }> = {
       success: true,
@@ -215,7 +217,7 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
           }
 
           log(`[Route Calc] Leg ${i + 1}: SUCCESS ${Math.round(ptv.duration / 60)}min, ${ptv.geometry.length} points`);
-          const dist = calculateDistance(from.position, to.position);
+          const dist = distanceMeters(from.position, to.position);
           segments.push({
             type: "ptv",
             coordinates: ptv.geometry,
@@ -226,12 +228,7 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
           totalDistance += dist;
           totalDuration += ptv.duration;
 
-          const parts = currentTime.split(":").map(Number);
-          const baseSec = parts[0] * 3600 + parts[1] * 60 + (parts[2] || 0);
-          const nextSec = baseSec + Math.round(ptv.duration);
-          const nh = Math.floor(nextSec / 3600) % 24;
-          const nm = Math.floor((nextSec % 3600) / 60);
-          currentTime = `${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}:00`;
+          currentTime = addSecondsToTime(currentTime, ptv.duration);
         } else {
           log(`[Route Calc] Leg ${i + 1}: Car "${from.name}" -> "${to.name}"`);
           const car = await osrmRoute(from.position, to.position);

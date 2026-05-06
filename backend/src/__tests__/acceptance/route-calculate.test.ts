@@ -4,11 +4,12 @@ import type { Express } from "express";
 import { createTestApp } from "../helpers/create-app";
 import { ptvFindRouteBetweenStops, ptvFindStopByName, ptvGetDepartures } from "../../services/ptv-api.service";
 
-// Mock axios for OSRM calls
+// Mock axios for OSRM calls.
+// The service uses process.env.OSRM_URL || "http://localhost:5000", so intercept localhost:5000.
 vi.mock("axios", () => ({
   default: {
     get: vi.fn(async (url: string) => {
-      if (url.includes("router.project-osrm.org")) {
+      if (url.includes("localhost:5000")) {
         return {
           data: {
             code: "Ok",
@@ -84,8 +85,10 @@ describe("POST /api/map/route/calculate", () => {
 
       expect(res.status).toBe(200);
       expect(res.body.data.segments[0].type).toBe("car");
-      // Fallback still returns a geometry (straight line)
+      // Fallback returns a straight-line 2-point geometry with Haversine distance
       expect(res.body.data.segments[0].coordinates).toHaveLength(2);
+      // Haversine distance for these coords is ~4.5km; OSRM mock returns 1200m
+      expect(res.body.data.totalDistance).toBeGreaterThan(1200);
     });
   });
 

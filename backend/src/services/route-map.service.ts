@@ -7,15 +7,6 @@ import axios from "axios";
 
 const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
 
-export function calculateDistance(coord1: Coordinate, coord2: Coordinate): number {
-  return distanceMeters(coord1, coord2);
-}
-
-export function lookupDestination(query: string): Coordinate | null {
-  const result = findStopCoordinate(query);
-  return result ? result.position : null;
-}
-
 export async function lookupDestinationAny(query: string): Promise<Coordinate | null> {
   const stop = findStopCoordinate(query);
   if (stop) return stop.position;
@@ -50,7 +41,7 @@ export async function osrmRoute(
     };
   } catch (error) {
     console.error("OSRM request failed, using fallback:", error);
-    const dist = calculateDistance(start, end);
+    const dist = distanceMeters(start, end);
     return {
       geometry: [
         [start.lat, start.lng],
@@ -87,86 +78,3 @@ export async function getPTVRoute(
   return null;
 }
 
-function addSecondsToTime(time: string, seconds: number): string {
-  const parts = time.split(":").map(Number);
-  const h = parts[0] ?? 0;
-  const m = parts[1] ?? 0;
-  const s = parts[2] ?? 0;
-  const total = h * 3600 + m * 60 + s + Math.round(seconds);
-  const hh = Math.floor(total / 3600) % 24;
-  const mm = Math.floor((total % 3600) / 60);
-  const ss = total % 60;
-  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
-}
-
-export type ChainResult =
-  | { ok: true; legs: Array<{ geometry: number[][]; duration: number; arrivalTime: string }> }
-  | { ok: false; failedLeg: number; from: string; to: string };
-
-export async function chainJourneyLegs(
-  stops: Array<{ coord: Coordinate; name: string }>,
-  departureTime: string
-): Promise<ChainResult> {
-  if (stops.length < 2) {
-    return { ok: false, failedLeg: 0, from: stops[0]?.name ?? "unknown", to: "unknown" };
-  }
-
-  const legs: Array<{ geometry: number[][]; duration: number; arrivalTime: string }> = [];
-  let currentTime = departureTime;
-
-  for (let i = 0; i < stops.length - 1; i++) {
-    const from = stops[i];
-    const to = stops[i + 1];
-    const result = await getPTVRoute(from.coord, to.coord, from.name, to.name);
-    if (result === null) {
-      return { ok: false, failedLeg: i, from: from.name, to: to.name };
-    }
-    const arrivalTime = addSecondsToTime(currentTime, result.duration);
-    legs.push({ ...result, arrivalTime });
-    currentTime = arrivalTime;
-  }
-
-  return { ok: true, legs };
-}
-
-export async function calculateMultiStopRoute(
-  start: Coordinate,
-  stops: Coordinate[],
-  end: Coordinate
-): Promise<{ segments: RouteSegment[]; totalDistance: number; totalDuration: number }> {
-  const segments: RouteSegment[] = [];
-  let totalDistance = 0;
-  let totalDuration = 0;
-
-  let currentPos = start;
-
-  for (let i = 0; i < stops.length; i++) {
-    const station = stops[i];
-    const carRoute = await osrmRoute(currentPos, station);
-    segments.push({
-      type: "car",
-      coordinates: carRoute.geometry,
-      color: "#2196F3",
-      distance: carRoute.distance,
-      duration: carRoute.duration,
-    });
-    totalDistance += carRoute.distance;
-    totalDuration += carRoute.duration;
-    currentPos = station;
-  }
-
-  if (currentPos.lat !== end.lat || currentPos.lng !== end.lng) {
-    const finalCarRoute = await osrmRoute(currentPos, end);
-    segments.push({
-      type: "car",
-      coordinates: finalCarRoute.geometry,
-      color: "#2196F3",
-      distance: finalCarRoute.distance,
-      duration: finalCarRoute.duration,
-    });
-    totalDistance += finalCarRoute.distance;
-    totalDuration += finalCarRoute.duration;
-  }
-
-  return { segments, totalDistance, totalDuration };
-}
