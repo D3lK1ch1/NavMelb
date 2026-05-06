@@ -49,7 +49,7 @@ router.post("/distance", (req: Request, res: Response) => {
   try {
     const { from, to } = req.body;
 
-    if (!from || !to || !from.lat || !from.lng || !to.lat || !to.lng) {
+    if (!from || !to || from.lat == null || from.lng == null || to.lat == null || to.lng == null) {
       return res.status(400).json({
         success: false,
         error: "Invalid coordinates format. Expected: { from: {lat, lng}, to: {lat, lng} }",
@@ -93,7 +93,7 @@ router.get("/stations/search", async (req: Request, res: Response) => {
     const ptvStops = await ptvSearchStops(query as string);
 
     const results = ptvStops
-      .slice(0, Number(limit) || 50)
+      .slice(0, limit !== undefined ? Number(limit) : 50)
       .filter((s) => {
         if (transportType) {
           if (transportType === "train") {
@@ -137,7 +137,7 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       departureTime?: string;
     };
 
-    if (!origin || !destination || !origin.lat || !origin.lng || !destination.lat || !destination.lng) {
+    if (!origin || !destination || origin.lat == null || origin.lng == null || destination.lat == null || destination.lng == null) {
       return res.status(400).json({
         success: false,
         error: "Invalid coordinates. Expected: { origin: {lat, lng}, destination: {lat, lng} }",
@@ -313,7 +313,7 @@ router.get("/streets/search", (req: Request, res: Response) => {
       });
     }
 
-    const results = searchStreets(query as string, Number(limit) || 20);
+    const results = searchStreets(query as string, limit !== undefined ? Number(limit) : 20);
 
     res.json({
       success: true,
@@ -343,8 +343,8 @@ router.get("/streets/nearby", (req: Request, res: Response) => {
 
     const results = nearbyStreets(
       { lat: Number(lat), lng: Number(lng) },
-      Number(radius) || 200,
-      Number(limit) || 20,
+      radius !== undefined ? Number(radius) : 200,
+      limit !== undefined ? Number(limit) : 20,
     );
 
     res.json({
