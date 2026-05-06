@@ -3,32 +3,35 @@ import { ApiResponse, Coordinate, RouteSegment, RouteResult, RouteStrategy, Wayp
 import { calculateDistance, lookupDestinationAny, osrmRoute, getPTVRoute } from "../services/route-map.service";
 import { ptvSearchStops, ptvGetDepartures, ptvFindStopByName } from "../services/ptv-api.service";
 import { searchStreets, nearbyStreets } from "../services/street-data.service";
-
-const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
+import { dispatch } from "../events/dispatch";
+import { classifyInfraError } from "../events/infra";
 
 const router = Router();
 
 router.get("/destination/lookup", async (req: Request, res: Response) => {
+  const { query } = req.query;
+
+  if (!query) {
+    return res.status(400).json({
+      success: false,
+      error: "Missing query parameter",
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   try {
-    const { query } = req.query;
-
-    if (!query) {
-      return res.status(400).json({
-        success: false,
-        error: "Missing query parameter",
-        timestamp: new Date().toISOString(),
-      });
-    }
-
     const coordinates = await lookupDestinationAny(query as string);
 
     if (!coordinates) {
+      dispatch({ type: "destination.lookup.not_found", query: query as string });
       return res.status(404).json({
         success: false,
         error: `Place "${query}" not found`,
         timestamp: new Date().toISOString(),
       });
     }
+
+    dispatch({ type: "destination.lookup.success", query: query as string, source: "geocode" });
 
     const response: ApiResponse<Coordinate> = {
       success: true,
@@ -37,6 +40,8 @@ router.get("/destination/lookup", async (req: Request, res: Response) => {
     };
     res.json(response);
   } catch (error) {
+    const classified = classifyInfraError(error);
+    dispatch({ type: "destination.lookup.error", query: query as string, error: classified });
     res.status(500).json({
       success: false,
       error: "Failed to lookup destination",
@@ -59,6 +64,8 @@ router.post("/distance", (req: Request, res: Response) => {
 
     const distance = calculateDistance(from, to);
 
+    dispatch({ type: "distance.calculated", distanceMeters: distance });
+
     const response: ApiResponse<{ distance: number; distanceKm: number; unit: string }> = {
       success: true,
       data: {
@@ -79,17 +86,17 @@ router.post("/distance", (req: Request, res: Response) => {
 });
 
 router.get("/stations/search", async (req: Request, res: Response) => {
+  const { query, limit, transportType } = req.query;
+
+  if (!query) {
+    return res.status(400).json({
+      success: false,
+      error: "Missing query parameter",
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   try {
-    const {query, limit, transportType} = req.query;
-
-    if (!query) {
-      return res.status(400).json({
-        success: false,
-        error: "Missing query parameter",
-        timestamp: new Date().toISOString(),
-      });
-    }
-
     const ptvStops = await ptvSearchStops(query as string);
 
     const results = ptvStops
@@ -112,6 +119,8 @@ router.get("/stations/search", async (req: Request, res: Response) => {
         transportTypes: s.routeType?.length ? s.routeType.map((t) => (["train", "tram", "bus"][t]) as TransportType) : (["train"] as TransportType[]),
       }));
 
+    dispatch({ type: "stations.search.success", query: query as string, count: results.length });
+
     const response: ApiResponse<{ name: string; position: Coordinate; transportTypes: TransportType[] }[]> = {
       success: true,
       data: results,
@@ -119,6 +128,8 @@ router.get("/stations/search", async (req: Request, res: Response) => {
     };
     res.json(response);
   } catch (error) {
+    const classified = classifyInfraError(error);
+    dispatch({ type: "stations.search.error", query: query as string, error: classified });
     res.status(500).json({
       success: false,
       error: "Failed to search stations",
@@ -149,6 +160,18 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       return res.status(400).json({
         success: false,
         error: "Invalid strategy. Must be: 'car' or 'ptv'",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // Validate all waypoint positions before routing
+    const invalidWaypointEarly = (waypoints || []).find(
+      (w) => !w || !w.position || w.position.lat == null || w.position.lng == null
+    );
+    if (invalidWaypointEarly) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid waypoint: each waypoint must have a position with lat and lng",
         timestamp: new Date().toISOString(),
       });
     }
@@ -194,18 +217,14 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
 
       let currentTime = resolvedDeparture;
 
-      log(`[Route Calc] Strategy: ptv, waypoints: ${stationStops.length} station(s)`);
-      log(`[Route Calc] All points:`, allPoints.map((p) => `${p.type}:${p.name}`).join(" -> "));
-
       for (let i = 0; i < allPoints.length - 1; i++) {
         const from = allPoints[i];
         const to = allPoints[i + 1];
 
         if (from.type === "station" && to.type === "station") {
-          log(`[Route Calc] Leg ${i + 1}: PTV "${from.name}" -> "${to.name}"`);
           const ptv = await getPTVRoute(from.position, to.position, from.name, to.name);
           if (!ptv) {
-            log(`[Route Calc] Leg ${i + 1}: FAILED`);
+            dispatch({ type: "route.leg.ptv.failed", from: from.name, to: to.name });
             segments.push({
               type: "failed",
               from: from.name,
@@ -214,7 +233,7 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
             continue;
           }
 
-          log(`[Route Calc] Leg ${i + 1}: SUCCESS ${Math.round(ptv.duration / 60)}min, ${ptv.geometry.length} points`);
+          dispatch({ type: "route.leg.ptv.success", from: from.name, to: to.name, durationSeconds: ptv.duration });
           const dist = calculateDistance(from.position, to.position);
           segments.push({
             type: "ptv",
@@ -233,9 +252,8 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
           const nm = Math.floor((nextSec % 3600) / 60);
           currentTime = `${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}:00`;
         } else {
-          log(`[Route Calc] Leg ${i + 1}: Car "${from.name}" -> "${to.name}"`);
           const car = await osrmRoute(from.position, to.position);
-          log(`[Route Calc] Leg ${i + 1}: Car ${Math.round(car.distance)}m, ${Math.round(car.duration)}s`);
+          dispatch({ type: "route.leg.car.success", from: from.name, to: to.name, distanceMeters: car.distance, durationSeconds: car.duration });
           segments.push({
             type: "car",
             coordinates: car.geometry,
@@ -248,8 +266,13 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
         }
       }
 
-      log(`[Route Calc] Result: ${segments.length} legs, ${Math.round(totalDistance / 1000)}km, ${Math.round(totalDuration / 60)}min`);
+      const failedLegs = segments.filter((s) => s.type === "failed").length;
+      if (failedLegs > 0) {
+        dispatch({ type: "route.partial_failure", strategy, failedLegs, totalLegs: segments.length });
+      }
     }
+
+    dispatch({ type: "route.calculated", strategy, legs: segments.length, totalDistanceMeters: totalDistance, totalDurationSeconds: totalDuration });
 
     const departureInfo = strategy !== "car"
       ? (await Promise.all(
@@ -292,7 +315,8 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
     const hasFailures = segments.some((s) => s.type === "failed");
     res.status(hasFailures ? 207 : 200).json(response);
   } catch (error) {
-    console.error(error);
+    const classified = classifyInfraError(error);
+    dispatch({ type: "route.error", strategy: String(req.body?.strategy ?? "unknown"), error: classified });
     res.status(500).json({
       success: false,
       error: "Failed to calculate route",
@@ -314,6 +338,8 @@ router.get("/streets/search", (req: Request, res: Response) => {
     }
 
     const results = searchStreets(query as string, limit !== undefined ? Number(limit) : 20);
+
+    dispatch({ type: "streets.search.success", query: query as string, count: results.length });
 
     res.json({
       success: true,
@@ -346,6 +372,8 @@ router.get("/streets/nearby", (req: Request, res: Response) => {
       radius !== undefined ? Number(radius) : 200,
       limit !== undefined ? Number(limit) : 20,
     );
+
+    dispatch({ type: "streets.nearby.success", lat: Number(lat), lng: Number(lng), count: results.length });
 
     res.json({
       success: true,
