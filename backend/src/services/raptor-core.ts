@@ -1,5 +1,7 @@
 import { distanceMeters } from "./gtfs-stop-indexservice";
 import { StreamStop, StreamStopTime, StreamTrip } from "./gtfs-stream.service";
+import { normalizeName } from "../utils/normalize";
+import { parseGtfsTime } from "../utils/time";
 
 const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
 
@@ -74,7 +76,7 @@ export class RaptorCore {
         lat: stop.stop_lat,
         lng: stop.stop_lon,
       });
-      this.stopNormalizedNames.push(this.normalizeStopName(stop.stop_name));
+      this.stopNormalizedNames.push(normalizeName(stop.stop_name));
       stopIdToTrips.set(stop.stop_id, []);
     }
 
@@ -101,8 +103,8 @@ export class RaptorCore {
 
       const raptorStopTimes: RaptorStopTime[] = sorted.map((st) => ({
         stopId: st.stop_id,
-        arrivalTime: this.parseTime(st.arrival_time),
-        departureTime: this.parseTime(st.departure_time),
+        arrivalTime: parseGtfsTime(st.arrival_time),
+        departureTime: parseGtfsTime(st.departure_time),
         stopSequence: st.stop_sequence,
       }));
 
@@ -126,15 +128,6 @@ export class RaptorCore {
     log(`[RaptorCore] Built index: ${this.stopIdxToTripIdxs.size} stops with trips`);
   }
 
-  private parseTime(time: string): number {
-    if (!time || time.length < 5) return 0;
-    const parts = time.split(":").map(Number);
-    const h = isNaN(parts[0]) ? 0 : parts[0];
-    const m = isNaN(parts[1]) ? 0 : parts[1];
-    const s = isNaN(parts[2]) ? 0 : parts[2];
-    return h * 3600 + m * 60 + s;
-  }
-
   getStopIdx(stopId: string): number | undefined {
     return this.stopIdToIdx.get(stopId);
   }
@@ -146,17 +139,6 @@ export class RaptorCore {
 
   getStopByIdx(idx: number): RaptorStop | undefined {
     return this.stops[idx];
-  }
-
-  private normalizeStopName(name: string): string {
-    return name
-      .toLowerCase()
-      .trim()
-      .replace(/\s+/g, " ")
-      .replace(/\bstation\b/g, "")
-      .replace(/\brailway\b/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
   }
 
   /**

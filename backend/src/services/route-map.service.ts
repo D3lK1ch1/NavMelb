@@ -1,5 +1,6 @@
 import { Coordinate, RouteSegment } from "../types";
 import { distanceMeters } from "../utils/geo";
+import { addSecondsToTime } from "../utils/time";
 import { findStopCoordinate } from "./gtfs-stop-indexservice";
 import { geocodeAddress } from "./geocoding.service";
 import { ptvFindRouteBetweenStops } from "./ptv-api.service";
@@ -85,18 +86,6 @@ export async function getPTVRoute(
 
   log(`[getPTVRoute] NULL: No route found for "${fromName}" -> "${toName}"`);
   return null;
-}
-
-function addSecondsToTime(time: string, seconds: number): string {
-  const parts = time.split(":").map(Number);
-  const h = parts[0] ?? 0;
-  const m = parts[1] ?? 0;
-  const s = parts[2] ?? 0;
-  const total = h * 3600 + m * 60 + s + Math.round(seconds);
-  const hh = Math.floor(total / 3600) % 24;
-  const mm = Math.floor((total % 3600) / 60);
-  const ss = total % 60;
-  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
 }
 
 export type ChainResult =

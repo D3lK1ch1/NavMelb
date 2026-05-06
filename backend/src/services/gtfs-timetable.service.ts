@@ -4,6 +4,8 @@ import AdmZip from "adm-zip";
 import { parse } from "csv-parse";
 import { Coordinate, ShapePoint, ShapeSegmentResult } from "../types/index.js";
 import { distanceMeters } from "../utils/geo";
+import { normalizeName } from "../utils/normalize";
+import { parseGtfsTime } from "../utils/time";
 
 const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
 
@@ -108,17 +110,6 @@ const transferGraph = new Map<string, TransferStation[]>();
 const transferCache = new Map<string, TransferJourney | null>();
 
 export { transferGraph };
-
-function normalizeName(value: string): string {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/\bstation\b/g, "")
-    .replace(/\brailway\b/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 function getTransportType(feedDir: string): "train" | "tram" | "bus" {
   const folderNum = feedDir.replace(/\D/g, "");
@@ -584,12 +575,6 @@ export function getTripBetweenStations(
 
   log(`[PTV Route] FAIL: No transfer journey found`);
   return null;
-}
-
-function parseGtfsTime(time: string): number {
-  if (!time || time.length < 5) return 0;
-  const [h, m, s] = time.split(":").map(Number);
-  return (isNaN(h) ? 0 : h) * 3600 + (isNaN(m) ? 0 : m) * 60 + (isNaN(s) ? 0 : s);
 }
 
 export async function loadGtfsShapes(): Promise<void> {

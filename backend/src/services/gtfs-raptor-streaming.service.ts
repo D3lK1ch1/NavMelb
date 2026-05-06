@@ -2,6 +2,8 @@ import fs from "fs";
 import path from "path";
 import { RaptorCore, RaptorJourney } from "./raptor-core";
 import { streamFeedData, StreamStop, StreamTrip, StreamStopTime } from "./gtfs-stream.service";
+import { normalizeName } from "../utils/normalize";
+import { parseGtfsTime, formatGtfsTime } from "../utils/time";
 
 const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
 
@@ -37,13 +39,6 @@ export interface RaptorResultJourney {
     routeName: string;
     stopTimes?: { stop: string; arrivalTime: string; departureTime: string }[];
   }[];
-}
-
-function timeToString(seconds: number): string {
-  const h = Math.floor(seconds / 3600) % 24;
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
 export async function loadRaptorStreaming(): Promise<void> {
@@ -123,21 +118,8 @@ export function queryRaptorJourney(
 
   const raptor = gtfsData.raptor!;
 
-  const fromNormalized = fromStationName
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/\bstation\b/g, "")
-    .replace(/\brailway\b/g, "")
-    .trim();
-
-  const toNormalized = toStationName
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/\bstation\b/g, "")
-    .replace(/\brailway\b/g, "")
-    .trim();
+  const fromNormalized = normalizeName(fromStationName);
+  const toNormalized = normalizeName(toStationName);
 
   const fromStop = raptor.findStopByName(fromNormalized);
   const toStop = raptor.findStopByName(toNormalized);
@@ -152,7 +134,7 @@ export function queryRaptorJourney(
   }
 
   const timeSeconds = departureTime
-    ? parseTime(departureTime)
+    ? parseGtfsTime(departureTime) || 9 * 3600
     : 9 * 3600;
 
   const journey = raptor.query(fromStop.id, toStop.id, timeSeconds);
@@ -168,33 +150,24 @@ export function queryRaptorJourney(
     destination: leg.toStopId,
     originName: leg.fromStopName,
     destinationName: leg.toStopName,
-    departureTime: timeToString(leg.fromTime),
-    arrivalTime: timeToString(leg.toTime),
+    departureTime: formatGtfsTime(leg.fromTime),
+    arrivalTime: formatGtfsTime(leg.toTime),
     routeName: leg.trip.routeId || leg.trip.id,
     stopTimes: leg.trip.stopTimes.map((st) => ({
       stop: st.stopId,
-      arrivalTime: timeToString(st.arrivalTime),
-      departureTime: timeToString(st.departureTime),
+      arrivalTime: formatGtfsTime(st.arrivalTime),
+      departureTime: formatGtfsTime(st.departureTime),
     })),
   }));
 
   log(`[Raptor] Journey: ${journey.legs.length} legs, ${journey.durationMinutes} mins`);
 
   return {
-    departureTime: timeToString(journey.departureTime),
-    arrivalTime: timeToString(journey.arrivalTime),
+    departureTime: formatGtfsTime(journey.departureTime),
+    arrivalTime: formatGtfsTime(journey.arrivalTime),
     durationMinutes: journey.durationMinutes,
     legs,
   };
-}
-
-function parseTime(time: string): number {
-  if (!time || time.length < 5) return 9 * 3600;
-  const parts = time.split(":").map(Number);
-  const h = isNaN(parts[0]) ? 0 : parts[0];
-  const m = isNaN(parts[1]) ? 0 : parts[1];
-  const s = isNaN(parts[2]) ? 0 : parts[2];
-  return h * 3600 + m * 60 + s;
 }
 
 export function getRaptorStats(): { stops: number; trips: number; loaded: boolean } {
