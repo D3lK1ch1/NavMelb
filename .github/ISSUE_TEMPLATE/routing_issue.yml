@@ -1,0 +1,83 @@
+name: Routing Issue
+description: Report incorrect, missing, or unexpected route results (RAPTOR, OSRM, GTFS)
+labels: ["routing", "backend"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for issues related to route calculation — wrong routes, missing legs, bad transfers, or incorrect times.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What went wrong with the route?
+      placeholder: "e.g. Route returned no tram options even though trams run on this corridor"
+    validations:
+      required: true
+
+  - type: input
+    id: origin
+    attributes:
+      label: Origin
+      placeholder: "e.g. Flinders Street Station, Melbourne"
+    validations:
+      required: true
+
+  - type: input
+    id: destination
+    attributes:
+      label: Destination
+      placeholder: "e.g. Box Hill Station"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: transport_modes
+    attributes:
+      label: Transport Mode(s) Involved
+      options:
+        - label: Train
+        - label: Tram
+        - label: Bus
+        - label: Car (OSRM)
+        - label: Mixed / Multimodal
+
+  - type: dropdown
+    id: gtfs_feed
+    attributes:
+      label: GTFS Feed (if known)
+      options:
+        - Metro trains
+        - Regional trains
+        - Trams
+        - Bus
+        - Unknown
+        - Not applicable
+
+  - type: textarea
+    id: expected_route
+    attributes:
+      label: Expected Route
+      placeholder: "e.g. Should have shown a tram route via route 86"
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual_route
+    attributes:
+      label: Actual Route Returned
+      placeholder: "e.g. Returned a walking route or empty result"
+    validations:
+      required: true
+
+  - type: input
+    id: departure_time
+    attributes:
+      label: Departure Time Used
+      placeholder: "e.g. 08:30 Monday"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console / API Logs
+      description: Paste any relevant backend logs or API responses.

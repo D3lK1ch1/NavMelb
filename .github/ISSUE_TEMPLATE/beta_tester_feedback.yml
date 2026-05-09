@@ -1,0 +1,78 @@
+name: Beta Tester Feedback
+description: General feedback from beta testers — impressions, friction points, and suggestions
+labels: ["beta", "feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing NavMelb! This form is for general feedback — anything that felt confusing, broken, or could be better. You don't need to be technical.
+
+  - type: dropdown
+    id: feedback_type
+    attributes:
+      label: What kind of feedback is this?
+      options:
+        - Something is broken
+        - Something is confusing or hard to use
+        - I expected it to work differently
+        - General suggestion
+        - Positive feedback
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What did you experience?
+      description: Describe what happened in plain language.
+      placeholder: "e.g. I couldn't figure out how to change my destination after a route was shown"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: What were you trying to do?
+      placeholder: "e.g. I wanted to navigate from Southern Cross to Carlton"
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: How often does this happen?
+      options:
+        - Every time
+        - Most of the time
+        - Sometimes
+        - Only happened once
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: How much did this affect your experience?
+      options:
+        - Couldn't use the app at all
+        - Made it frustrating to use
+        - Minor annoyance
+        - Just a suggestion
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Device type
+      options:
+        - Android
+        - iOS
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device model (optional)
+      placeholder: "e.g. iPhone 13, Samsung S21"
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots (optional)
+      description: A picture helps a lot — feel free to attach one.

@@ -1,0 +1,84 @@
+name: Tester Report
+description: Structured report from exploratory or manual testing sessions
+labels: ["testing", "qa"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template after a testing session to log what you tested and what you found.
+
+  - type: input
+    id: scenario
+    attributes:
+      label: Test Scenario
+      placeholder: "e.g. Multimodal route from CBD to Footscray via tram + walking"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: result
+    attributes:
+      label: Overall Result
+      options:
+        - Pass
+        - Fail
+        - Partial Pass
+        - Blocked
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: What did you test?
+      options:
+        - label: Route was calculated successfully
+        - label: Route displayed correctly on map
+        - label: Transit legs showed correct stop names
+        - label: Departure/arrival times were reasonable
+        - label: App did not crash during this scenario
+        - label: UI was readable and usable throughout
+
+  - type: textarea
+    id: findings
+    attributes:
+      label: Findings / Observations
+      description: Describe anything unexpected, even if it didn't cause a clear failure.
+      placeholder: "e.g. Route was correct but tram stop name showed as undefined on one leg"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform Tested
+      options:
+        - Android (physical device)
+        - Android (emulator)
+        - iOS (physical device)
+        - iOS (simulator)
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device / OS
+      placeholder: "e.g. Pixel 7, Android 14"
+
+  - type: input
+    id: branch
+    attributes:
+      label: Branch / Build Tested
+      placeholder: "e.g. main, feature/raptor-fix"
+
+  - type: textarea
+    id: console_errors
+    attributes:
+      label: Console Errors (if any)
+      description: Paste any errors from the Expo console or browser devtools.
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
