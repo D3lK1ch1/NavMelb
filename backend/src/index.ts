@@ -3,10 +3,14 @@ import { createApp } from "./app";
 import { loadStreetData } from "./services/street-data.service";
 import { registerSink } from "./events/dispatch";
 import { NavEvent } from "./events/types";
+import { createFileSink } from "./events/sinks/file-sink";
 
 dotenv.config();
 
-// Register a console-based sink in non-production environments
+// File sink — always registered. Routes catastrophic/high events to log files.
+registerSink(createFileSink());
+
+// Console sink — dev only, shows all events for live visibility.
 if (process.env.NODE_ENV !== "production") {
   registerSink((event: NavEvent) => {
     console.log(`[event] ${event.type}`, event);
