@@ -100,6 +100,20 @@ router.get("/stations/search", async (req: Request, res: Response) => {
     const ptvStops = await ptvSearchStops(query as string);
 
     const filtered = ptvStops.filter((s) => {
+    const results = ptvStops
+      .slice(0, limit !== undefined ? Number(limit) : 50)
+      .filter((s) => {
+        if (transportType) {
+          if (transportType === "train") {
+            return s.routeType.includes(0);
+          } else if (transportType === "tram") {
+            return s.routeType.includes(1);
+          } else if (transportType === "bus") {
+            return s.routeType.includes(2);
+          }
+        }
+        return true;
+      });
       if (transportType) {
         if (transportType === "train") {
           return s.routeType.includes(0);
@@ -121,6 +135,7 @@ router.get("/stations/search", async (req: Request, res: Response) => {
         transportTypes: s.routeType?.length ? s.routeType.map((t) => (["train", "tram", "bus"][t]) as TransportType) : (["train"] as TransportType[]),
       }));
 
+    res.json({
     dispatch({ type: "stations.search.success", query: query as string, count: results.length });
 
     res.json({
@@ -343,6 +358,7 @@ router.get("/streets/search", (req: Request, res: Response) => {
     const streetLimit = Number(limit) || 20;
     const allStreets = searchStreets(query as string, Infinity);
     const results = allStreets.slice(0, streetLimit);
+    const results = searchStreets(query as string, limit !== undefined ? Number(limit) : 20);
 
     dispatch({ type: "streets.search.success", query: query as string, count: results.length });
 
@@ -379,6 +395,8 @@ router.get("/streets/nearby", (req: Request, res: Response) => {
       { lat: Number(lat), lng: Number(lng) },
       Number(radius) || 200,
       Infinity,
+      radius !== undefined ? Number(radius) : 200,
+      limit !== undefined ? Number(limit) : 20,
     );
     const results = allNearby.slice(0, nearbyLimit);
 
