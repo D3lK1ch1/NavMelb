@@ -114,6 +114,17 @@ router.get("/stations/search", async (req: Request, res: Response) => {
         }
         return true;
       });
+      if (transportType) {
+        if (transportType === "train") {
+          return s.routeType.includes(0);
+        } else if (transportType === "tram") {
+          return s.routeType.includes(1);
+        } else if (transportType === "bus") {
+          return s.routeType.includes(2);
+        }
+      }
+      return true;
+    });
 
     const pageLimit = Number(limit) || 50;
     const results = filtered
@@ -127,7 +138,7 @@ router.get("/stations/search", async (req: Request, res: Response) => {
     res.json({
     dispatch({ type: "stations.search.success", query: query as string, count: results.length });
 
-    const response: ApiResponse<{ name: string; position: Coordinate; transportTypes: TransportType[] }[]> = {
+    res.json({
       success: true,
       data: results,
       total: filtered.length,
@@ -171,7 +182,6 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       });
     }
 
-    // Validate all waypoint positions before routing
     const invalidWaypointEarly = (waypoints || []).find(
       (w) => !w || !w.position || w.position.lat == null || w.position.lng == null
     );
@@ -183,7 +193,6 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       });
     }
 
-    // Normalise departure time: accept "HH:MM" or "HH:MM:SS", default to now
     const now = new Date();
     const resolvedDeparture = departureTime
       ? (departureTime.split(":").length === 2 ? departureTime + ":00" : departureTime)
@@ -215,7 +224,6 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
         });
       }
 
-      // Build full point list: origin + all waypoints + destination
       const allPoints: Array<{ position: Coordinate; type: "station" | "place"; name: string }> = [
         { position: origin, type: "place", name: "Origin" },
         ...(waypoints || []).map((w) => ({ position: w.position, type: w.type, name: w.name || "" })),
