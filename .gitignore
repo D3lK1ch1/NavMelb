@@ -20,3 +20,7 @@ build/
 #Environment variables
 .env
 .env.*
+
+# Personal notes
+notes/
+audit-docs/
