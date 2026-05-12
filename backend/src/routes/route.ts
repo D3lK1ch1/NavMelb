@@ -99,20 +99,22 @@ router.get("/stations/search", async (req: Request, res: Response) => {
   try {
     const ptvStops = await ptvSearchStops(query as string);
 
-    const results = ptvStops
-      .slice(0, limit !== undefined ? Number(limit) : 50)
-      .filter((s) => {
-        if (transportType) {
-          if (transportType === "train") {
-            return s.routeType.includes(0);
-          } else if (transportType === "tram") {
-            return s.routeType.includes(1);
-          } else if (transportType === "bus") {
-            return s.routeType.includes(2);
-          }
+    const filtered = ptvStops.filter((s) => {
+      if (transportType) {
+        if (transportType === "train") {
+          return s.routeType.includes(0);
+        } else if (transportType === "tram") {
+          return s.routeType.includes(1);
+        } else if (transportType === "bus") {
+          return s.routeType.includes(2);
         }
-        return true;
-      })
+      }
+      return true;
+    });
+
+    const pageLimit = Number(limit) || 50;
+    const results = filtered
+      .slice(0, pageLimit)
       .map((s) => ({
         name: s.displayName,
         position: s.position,
@@ -121,12 +123,13 @@ router.get("/stations/search", async (req: Request, res: Response) => {
 
     dispatch({ type: "stations.search.success", query: query as string, count: results.length });
 
-    const response: ApiResponse<{ name: string; position: Coordinate; transportTypes: TransportType[] }[]> = {
+    res.json({
       success: true,
       data: results,
+      total: filtered.length,
+      truncated: filtered.length > pageLimit,
       timestamp: new Date().toISOString(),
-    };
-    res.json(response);
+    });
   } catch (error) {
     const classified = classifyInfraError(error);
     dispatch({ type: "stations.search.error", query: query as string, error: classified });
@@ -164,7 +167,6 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       });
     }
 
-    // Validate all waypoint positions before routing
     const invalidWaypointEarly = (waypoints || []).find(
       (w) => !w || !w.position || w.position.lat == null || w.position.lng == null
     );
@@ -176,7 +178,6 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       });
     }
 
-    // Normalise departure time: accept "HH:MM" or "HH:MM:SS", default to now
     const now = new Date();
     const resolvedDeparture = departureTime
       ? (departureTime.split(":").length === 2 ? departureTime + ":00" : departureTime)
@@ -208,7 +209,6 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
         });
       }
 
-      // Build full point list: origin + all waypoints + destination
       const allPoints: Array<{ position: Coordinate; type: "station" | "place"; name: string }> = [
         { position: origin, type: "place", name: "Origin" },
         ...(waypoints || []).map((w) => ({ position: w.position, type: w.type, name: w.name || "" })),
@@ -299,12 +299,15 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
 
     const arrivalTime = new Date(Date.now() + totalDuration * 1000);
 
+    const failedLegsCount = segments.filter((s) => s.type === "failed").length;
+
     const result: RouteResult = {
       segments,
       totalDistance,
       totalDuration,
       estimatedArrival: arrivalTime.toISOString(),
       departureInfo: departureInfo?.length ? departureInfo : undefined,
+      failedLegs: failedLegsCount,
     };
 
     const response: ApiResponse<RouteResult> = {
@@ -312,7 +315,7 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       data: result,
       timestamp: new Date().toISOString(),
     };
-    const hasFailures = segments.some((s) => s.type === "failed");
+    const hasFailures = failedLegsCount > 0;
     res.status(hasFailures ? 207 : 200).json(response);
   } catch (error) {
     const classified = classifyInfraError(error);
@@ -337,13 +340,17 @@ router.get("/streets/search", (req: Request, res: Response) => {
       });
     }
 
-    const results = searchStreets(query as string, limit !== undefined ? Number(limit) : 20);
+    const streetLimit = Number(limit) || 20;
+    const allStreets = searchStreets(query as string, Infinity);
+    const results = allStreets.slice(0, streetLimit);
 
     dispatch({ type: "streets.search.success", query: query as string, count: results.length });
 
     res.json({
       success: true,
       data: results,
+      total: allStreets.length,
+      truncated: allStreets.length > streetLimit,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -367,17 +374,21 @@ router.get("/streets/nearby", (req: Request, res: Response) => {
       });
     }
 
-    const results = nearbyStreets(
+    const nearbyLimit = Number(limit) || 20;
+    const allNearby = nearbyStreets(
       { lat: Number(lat), lng: Number(lng) },
-      radius !== undefined ? Number(radius) : 200,
-      limit !== undefined ? Number(limit) : 20,
+      Number(radius) || 200,
+      Infinity,
     );
+    const results = allNearby.slice(0, nearbyLimit);
 
     dispatch({ type: "streets.nearby.success", lat: Number(lat), lng: Number(lng), count: results.length });
 
     res.json({
       success: true,
       data: results,
+      total: allNearby.length,
+      truncated: allNearby.length > nearbyLimit,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
