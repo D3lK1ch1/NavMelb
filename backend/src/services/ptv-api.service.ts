@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from "axios";
 import crypto from "node:crypto";
+import { dispatch } from "../events/dispatch";
 
 export interface Coordinate {
   lat: number;
@@ -197,8 +198,6 @@ export async function ptvGetPatternWithStops(
     stops: Record<string, unknown>;
   }>(`/pattern/run/${runRef}/route_type/${routeType}`, {params: {expand : "stop"}});
 
-  console.log("[PTV expand] stops", JSON.stringify(response.data.stops, null, 2));
-
   const departures = response.data.departures;
   if (!departures?.length) return null;
 
@@ -219,55 +218,40 @@ export async function ptvFindRouteBetweenStops(
   toStationName: string,
   routeType: number
 ): Promise<PTvRouteResult | null> {
-  console.log(`[PTV Route] Step 1: Searching origin "${fromStationName}" (routeType=${routeType})`);
   const originStops = await ptvSearchStops(fromStationName);
-  console.log(`[PTV Route] Found ${originStops.length} stops for origin`);
   const origin = pickBestStop(originStops, routeType);
   if (!origin) {
-    console.log(`[PTV Route] FAIL: No matching stop for origin (routeType=${routeType})`);
+    dispatch({ type: "ptv.route.origin_not_found", query: fromStationName, routeType });
     return null;
   }
-  console.log(`[PTV Route] Origin: stopId=${origin.stopId} name="${origin.displayName}"`);
+  dispatch({ type: "ptv.route.origin_found", stopId: origin.stopId, displayName: origin.displayName });
 
-  console.log(`[PTV Route] Step 2: Searching destination "${toStationName}"`);
   const destStops = await ptvSearchStops(toStationName);
-  console.log(`[PTV Route] Found ${destStops.length} stops for destination`);
   const dest = pickBestStop(destStops, routeType);
   if (!dest) {
-    console.log(`[PTV Route] FAIL: No matching stop for destination (routeType=${routeType})`);
+    dispatch({ type: "ptv.route.destination_not_found", query: toStationName, routeType });
     return null;
   }
-  console.log(`[PTV Route] Destination: stopId=${dest.stopId} name="${dest.displayName}"`);
+  dispatch({ type: "ptv.route.destination_found", stopId: dest.stopId, displayName: dest.displayName });
 
-  console.log(`[PTV Route] Step 3: Getting departures from origin stopId=${origin.stopId}`);
   const departures = (await ptvGetDepartures(routeType, origin.stopId)).slice(0, 5);
   if (!departures.length) {
-    console.log(`[PTV Route] FAIL: No departures from origin stop`);
+    dispatch({ type: "ptv.route.no_departures", stopId: origin.stopId });
     return null;
   }
-  console.log(`[PTV Route] Got ${departures.length} departures`);
 
-  // Step 4: For each departure, check if destination stop_id is in the pattern
+  // For each departure, check if destination stop_id is in the pattern
   for (const dep of departures) {
-    console.log(`[PTV Route] Step 4: Checking runRef=${dep.runRef}`);
     const pattern = await ptvGetPatternWithStops(routeType, dep.runRef);
-    if (!pattern) {
-      console.log(`[PTV Route]  No pattern for runRef=${dep.runRef}`);
-      continue;
-    }
-    console.log(`[PTV Route]  Pattern has ${pattern.stops.length} stops`);
-    console.log(`[PTV Route]  origin.stopId=${origin.stopId} dest.stopId=${dest.stopId} 
-    patternStops=${JSON.stringify(pattern.stops.slice(0, 5).map(s => s.stopId))}`);
+    if (!pattern) continue;
 
     const originIdx = pattern.stops.findIndex((s) => s.stopId === origin.stopId);
     const destIdx = pattern.stops.findIndex((s) => s.stopId === dest.stopId);
-    console.log(`[PTV Route]  originIdx=${originIdx} destIdx=${destIdx}`);
 
     if (originIdx !== -1 && destIdx !== -1 && destIdx > originIdx) {
       const seqDiff = pattern.stops[destIdx].stopSequence - pattern.stops[originIdx].stopSequence;
       const durationSeconds = seqDiff * AVG_DWELL_SECONDS;
-
-      console.log(`[PTV Route] SUCCESS: ${seqDiff} stops, ~${Math.round(durationSeconds/60)}min`);
+      dispatch({ type: "ptv.route.success", from: fromStationName, to: toStationName, stops: seqDiff, durationSeconds });
       return {
         geometry: [],
         durationSeconds,
@@ -276,7 +260,7 @@ export async function ptvFindRouteBetweenStops(
     }
   }
 
-  console.log(`[PTV Route] FAIL: No departure pattern includes destination`);
+  dispatch({ type: "ptv.route.no_matching_pattern", from: fromStationName, to: toStationName });
   return null;
 }
 

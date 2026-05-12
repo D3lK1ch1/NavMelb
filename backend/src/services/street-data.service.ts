@@ -2,8 +2,7 @@ import fs from "fs";
 import path from "path";
 import { Coordinate } from "../types";
 import { distanceMeters } from "../utils/geo";
-
-const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
+import { dispatch } from "../events/dispatch";
 
 interface StreetFeature {
   name: string;
@@ -22,7 +21,7 @@ export function loadStreetData(filePath?: string): void {
   const resolved = filePath || path.resolve(__dirname, "../../data/street-names.geojson");
 
   if (!fs.existsSync(resolved)) {
-    console.warn(`Street data not found at ${resolved}, street search will be empty.`);
+    dispatch({ type: "infra.missing_data", resource: resolved, message: "Street data not found, street search will be empty." });
     streets = [];
     return;
   }
@@ -45,8 +44,6 @@ export function loadStreetData(filePath?: string): void {
       geometry: coords,
     };
   });
-
-  log(`[Streets] Loaded ${streets.length} street centrelines`);
 }
 
 /** Search streets by partial name match. */

@@ -1,0 +1,70 @@
+name: UI / UX Issue
+description: Report a visual bug, layout problem, or usability issue in the app
+labels: ["ui", "ux", "frontend"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for issues with how the app looks or feels — layout bugs, map rendering, interaction problems, accessibility.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the issue
+      placeholder: "e.g. Search bar overlaps the route panel on small screens"
+    validations:
+      required: true
+
+  - type: input
+    id: screen
+    attributes:
+      label: Screen / Component Affected
+      placeholder: "e.g. MapExplorationScreen, SearchBar, RoutePanel"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Android
+        - iOS
+        - Both
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device Model
+      placeholder: "e.g. Samsung Galaxy S23, iPhone 14"
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How much does this affect usability?
+      options:
+        - Cosmetic (looks off, doesn't affect use)
+        - Usability (makes it harder to use)
+        - Blocking (cannot complete a task)
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      placeholder: |
+        1. Open the map screen
+        2. Tap the search bar
+        3. Keyboard pushes route panel off screen
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Visual issues are much easier to fix with a screenshot.
