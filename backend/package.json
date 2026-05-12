@@ -8,7 +8,8 @@
     "test:watch": "vitest",
     "dev": "nodemon --exec \"node --max-old-space-size=4096 -r ts-node/register\" src/index.ts",
     "build": "tsc",
-    "start": "node --max-old-space-size=4096 dist/index.js"
+    "start": "node --max-old-space-size=4096 dist/index.js",
+    "smoke": "ts-node src/cli.ts"
   },
   "keywords": [
     "navigation",
