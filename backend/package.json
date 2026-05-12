@@ -30,6 +30,7 @@
     "raptor-journey-planner": "^2.2.3"
   },
   "devDependencies": {
+    "@fast-check/vitest": "^0.4.1",
     "@types/adm-zip": "^0.5.7",
     "@types/archiver": "^7.0.0",
     "@types/cors": "^2.8.19",

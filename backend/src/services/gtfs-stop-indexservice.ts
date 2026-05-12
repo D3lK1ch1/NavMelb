@@ -6,7 +6,7 @@ import { Coordinate } from "../types";
 import { distanceMeters } from "../utils/geo";
 import { streamStopTimesFromZip } from "./gtfs-stream.service";
 
-const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
+const log = (..._args: unknown[]) => {};
 
 type StopRow = {
   stop_id: string;
