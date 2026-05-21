@@ -20,6 +20,14 @@ router.get("/destination/lookup", async (req: Request, res: Response) => {
   }
 
   try {
+    if ((query as string).length > 200) {
+      return res.status(400).json({
+        success: false,
+        error: "Query too long (max 200 characters)",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const coordinates = await lookupDestinationAny(query as string);
 
     if (!coordinates) {
@@ -62,6 +70,30 @@ router.post("/distance", (req: Request, res: Response) => {
       });
     }
 
+    if (isNaN(Number(from.lat)) || isNaN(Number(from.lng)) || isNaN(Number(to.lat)) || isNaN(Number(to.lng))) {
+      return res.status(400).json({
+        success: false,
+        error: "Coordinates must be numeric",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (Number(from.lat) < -90 || Number(from.lat) > 90 || Number(to.lat) < -90 || Number(to.lat) > 90) {
+      return res.status(400).json({
+        success: false,
+        error: "Latitude must be between -90 and 90",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (Number(from.lng) < -180 || Number(from.lng) > 180 || Number(to.lng) < -180 || Number(to.lng) > 180) {
+      return res.status(400).json({
+        success: false,
+        error: "Longitude must be between -180 and 180",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const distance = calculateDistance(from, to);
 
     dispatch({ type: "distance.calculated", distanceMeters: distance });
@@ -97,6 +129,40 @@ router.get("/stations/search", async (req: Request, res: Response) => {
   }
 
   try {
+    
+    if ((query as string).length > 200) {
+      return res.status(400).json({
+        success: false,
+        error: "Query too long (max 200 characters)",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (limit !== undefined) {
+      const limitNum = Number(limit);
+      if (isNaN(limitNum) || !Number.isInteger(limitNum)) {
+        return res.status(400).json({
+          success: false,
+          error: "Limit must be an integer",
+          timestamp: new Date().toISOString(),
+        });
+      }
+      if (limitNum < 0) {
+        return res.status(400).json({
+          success: false,
+          error: "Limit must not be negative",
+          timestamp: new Date().toISOString(),
+        });
+      }
+      if (limitNum > 100) {
+        return res.status(400).json({
+          success: false,
+          error: "Limit must not exceed 100",
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+    
     const ptvStops = await ptvSearchStops(query as string);
 
     const filtered = ptvStops.filter((s) => {
@@ -159,6 +225,38 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       });
     }
 
+    if (isNaN(Number(origin.lat)) || isNaN(Number(origin.lng)) || isNaN(Number(destination.lat)) || isNaN(Number(destination.lng))) {
+      return res.status(400).json({
+        success: false,
+        error: "Coordinates must be numeric",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (Number(origin.lat) < -90 || Number(origin.lat) > 90 || Number(destination.lat) < -90 || Number(destination.lat) > 90) {
+      return res.status(400).json({
+        success: false,
+        error: "Latitude must be between -90 and 90",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (Number(origin.lng) < -180 || Number(origin.lng) > 180 || Number(destination.lng) < -180 || Number(destination.lng) > 180) {
+      return res.status(400).json({
+        success: false,
+        error: "Longitude must be between -180 and 180",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (waypoints && waypoints.length > 20) {
+      return res.status(400).json({
+        success: false,
+        error: "Too many waypoints (max 20)",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     if (!strategy || !["car", "ptv"].includes(strategy)) {
       return res.status(400).json({
         success: false,
@@ -167,6 +265,13 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       });
     }
 
+    if (departureTime !== undefined && !/^\d{2}:\d{2}(:\d{2})?$/.test(departureTime)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid departureTime format. Expected HH:MM or HH:MM:SS",
+        timestamp: new Date().toISOString(),
+      });
+    }
     const invalidWaypointEarly = (waypoints || []).find(
       (w) => !w || !w.position || w.position.lat == null || w.position.lng == null
     );
@@ -178,6 +283,18 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       });
     }
 
+    if (departureTime !== undefined) {
+      const parts = departureTime.split(":").map(Number);
+      if (parts[0] < 0 || parts[0] > 23 || parts[1] < 0 || parts[1] > 59 || (parts[2] !== undefined && (parts[2] < 0 || parts[2] > 59))) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid departureTime: hours must be 0-23, minutes and seconds must be 0-59",
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+
+    // Normalise departure time: accept "HH:MM" or "HH:MM:SS", default to now
     const now = new Date();
     const resolvedDeparture = departureTime
       ? (departureTime.split(":").length === 2 ? departureTime + ":00" : departureTime)
@@ -340,9 +457,43 @@ router.get("/streets/search", (req: Request, res: Response) => {
       });
     }
 
+    if ((query as string).length > 200) {
+      return res.status(400).json({
+        success: false,
+        error: "Query too long (max 200 characters)",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (limit !== undefined) {
+      const limitNum = Number(limit);
+      if (isNaN(limitNum) || !Number.isInteger(limitNum)) {
+        return res.status(400).json({
+          success: false,
+          error: "Limit must be an integer",
+          timestamp: new Date().toISOString(),
+        });
+      }
+      if (limitNum < 0) {
+        return res.status(400).json({
+          success: false,
+          error: "Limit must not be negative",
+          timestamp: new Date().toISOString(),
+        });
+      }
+      if (limitNum > 100) {
+        return res.status(400).json({
+          success: false,
+          error: "Limit must not exceed 100",
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+
     const streetLimit = Number(limit) || 20;
     const allStreets = searchStreets(query as string, Infinity);
     const results = allStreets.slice(0, streetLimit);
+
 
     dispatch({ type: "streets.search.success", query: query as string, count: results.length });
 
@@ -372,6 +523,63 @@ router.get("/streets/nearby", (req: Request, res: Response) => {
         error: "Missing lat and lng parameters",
         timestamp: new Date().toISOString(),
       });
+    }
+
+    if (isNaN(Number(lat)) || isNaN(Number(lng))) {
+      return res.status(400).json({
+        success: false,
+        error: "lat and lng must be numeric",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (radius !== undefined && isNaN(Number(radius))) {
+      return res.status(400).json({
+        success: false,
+        error: "radius must be numeric",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (Number(lat) < -90 || Number(lat) > 90) {
+      return res.status(400).json({
+        success: false,
+        error: "Latitude must be between -90 and 90",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (Number(lng) < -180 || Number(lng) > 180) {
+      return res.status(400).json({
+        success: false,
+        error: "Longitude must be between -180 and 180",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (limit !== undefined) {
+      const limitNum = Number(limit);
+      if (isNaN(limitNum) || !Number.isInteger(limitNum)) {
+        return res.status(400).json({
+          success: false,
+          error: "Limit must be an integer",
+          timestamp: new Date().toISOString(),
+        });
+      }
+      if (limitNum < 0) {
+        return res.status(400).json({
+          success: false,
+          error: "Limit must not be negative",
+          timestamp: new Date().toISOString(),
+        });
+      }
+      if (limitNum > 100) {
+        return res.status(400).json({
+          success: false,
+          error: "Limit must not exceed 100",
+          timestamp: new Date().toISOString(),
+        });
+      }
     }
 
     const nearbyLimit = Number(limit) || 20;
