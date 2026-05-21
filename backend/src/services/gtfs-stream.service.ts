@@ -2,8 +2,9 @@ import fs from "fs";
 import path from "path";
 import AdmZip from "adm-zip";
 import { parse } from "csv-parse";
+import { dispatch } from "../events/dispatch";
 
-const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
+const log = (..._args: unknown[]) => {};
 
 export interface StreamStop {
   stop_id: string;
@@ -65,7 +66,7 @@ export async function* streamStopsFromZip(
       };
     }
   } catch (err) {
-    console.error(`[Stream] Error reading stops from ${zipPath}:`, err);
+    dispatch({ type: 'external.api.failed', service: 'ptv', endpoint: zipPath, error: err });
   }
 }
 
@@ -90,7 +91,7 @@ export async function* streamStopTimesFromZip(
       };
     }
   } catch (err) {
-    console.error(`[Stream] Error reading stop_times from ${zipPath}:`, err);
+    dispatch({ type: 'external.api.failed', service: 'ptv', endpoint: zipPath, error: err });
   }
 }
 
@@ -115,7 +116,7 @@ export async function* streamTripsFromZip(
       };
     }
   } catch (err) {
-    console.error(`[Stream] Error reading trips from ${zipPath}:`, err);
+    dispatch({ type: 'external.api.failed', service: 'ptv', endpoint: zipPath, error: err });
   }
 }
 
