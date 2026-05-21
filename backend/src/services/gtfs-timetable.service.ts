@@ -4,8 +4,9 @@ import AdmZip from "adm-zip";
 import { parse } from "csv-parse";
 import { Coordinate, ShapePoint, ShapeSegmentResult } from "../types/index.js";
 import { distanceMeters } from "../utils/geo";
+import { dispatch } from "../events/dispatch";
 
-const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
+const log = (..._args: unknown[]) => {};
 
 interface BoundedCache<K, V> {
   get(key: K): V | undefined;
@@ -273,7 +274,7 @@ export async function loadGtfsTimetables(): Promise<void> {
   const absoluteRoot = path.resolve(process.cwd(), gtfsRoot);
 
   if (!fs.existsSync(absoluteRoot)) {
-    console.warn("GTFS root not found, skipping timetable load.");
+    dispatch({ type: "infra.missing_data", resource: absoluteRoot, message: "GTFS root not found, skipping timetable load." });
     return;
   }
 
@@ -389,11 +390,9 @@ export async function loadGtfsTimetables(): Promise<void> {
 
       log(`Loaded ${type} data from ${feedDir}`);
     } catch (err) {
-      console.error(`Failed to load ${feedDir}:`, err);
+      dispatch({ type: "external.api.failed", service: "ptv", endpoint: feedDir, error: err });
     }
   }
-
-  log(`[GTFS Timetables] Loaded: ${tripIndex.size} trips, ${stopTimesIndex.size} stop_times entries, ${stopNameToId.size} stops`);
 
   buildTransferGraph();
 }
@@ -597,7 +596,7 @@ export async function loadGtfsShapes(): Promise<void> {
   const absoluteRoot = path.resolve(process.cwd(), gtfsRoot);
 
   if (!fs.existsSync(absoluteRoot)) {
-    console.warn("GTFS root not found, skipping shapes load.");
+    dispatch({ type: "infra.missing_data", resource: absoluteRoot, message: "GTFS root not found, skipping shapes load." });
     return;
   }
 
@@ -653,11 +652,9 @@ export async function loadGtfsShapes(): Promise<void> {
         log(`[GTFS Shapes] ${feedDir}: ${pointCount} points for ${totalShapes} shapes`);
       }
     } catch (err) {
-      console.error(`Failed to load shapes from ${feedDir}:`, err);
+      dispatch({ type: "external.api.failed", service: "ptv", endpoint: feedDir, error: err });
     }
   }
-
-  log(`[GTFS Shapes] Loaded ${totalShapes} shapes with ${totalPoints} total points`);
 }
 
 export function getShapeSegment(

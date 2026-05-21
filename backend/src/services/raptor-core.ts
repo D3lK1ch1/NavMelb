@@ -1,7 +1,7 @@
 import { distanceMeters } from "./gtfs-stop-indexservice";
 import { StreamStop, StreamStopTime, StreamTrip } from "./gtfs-stream.service";
 
-const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
+const log = (..._args: unknown[]) => {};
 
 export interface RaptorStop {
   id: string;

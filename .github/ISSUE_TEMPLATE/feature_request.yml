@@ -1,0 +1,59 @@
+name: Feature Request
+description: Suggest a new feature or improvement to NavMelb
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Got an idea? Describe the problem you're trying to solve and what you'd like to see.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Explain the gap or frustration, not the solution yet.
+      placeholder: "e.g. There's no way to see how long I'll wait at a stop before the next tram"
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      placeholder: "e.g. Show next departure time on the stop marker when selected"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Which part of the app does this affect?
+      options:
+        - Frontend (UI / map / screens)
+        - Backend (routing, API)
+        - GTFS / transit data
+        - Both frontend and backend
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: How important is this to you?
+      options:
+        - Nice to have
+        - Would significantly improve the app
+        - Blocking a core use case
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      placeholder: "e.g. Could also show this info in the route summary panel instead"
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Any mockups, references, or related issues?

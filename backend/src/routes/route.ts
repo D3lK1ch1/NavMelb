@@ -6,8 +6,8 @@ import { searchStreets, nearbyStreets } from "../services/street-data.service";
 import { IRouteStrategy, RouteCommand } from "../strategies/types";
 import { CarStrategy } from "../strategies/car.strategy";
 import { PtvStrategy, PtvValidationError } from "../strategies/ptv.strategy";
-
-const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
+import { dispatch } from "../events/dispatch";
+import { classifyInfraError } from "../events/infra";
 
 const router = Router();
 
@@ -40,13 +40,21 @@ async function fetchDepartureInfo(waypoints: Waypoint[]): Promise<DepartureInfo[
 }
 
 router.get("/destination/lookup", async (req: Request, res: Response) => {
-  try {
-    const { query } = req.query;
+  const { query } = req.query;
 
-    if (!query) {
+  if (!query) {
+    return res.status(400).json({
+      success: false,
+      error: "Missing query parameter",
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  try {
+    if ((query as string).length > 200) {
       return res.status(400).json({
         success: false,
-        error: "Missing query parameter",
+        error: "Query too long (max 200 characters)",
         timestamp: new Date().toISOString(),
       });
     }
@@ -54,12 +62,15 @@ router.get("/destination/lookup", async (req: Request, res: Response) => {
     const coordinates = await lookupDestinationAny(query as string);
 
     if (!coordinates) {
+      dispatch({ type: "destination.lookup.not_found", query: query as string });
       return res.status(404).json({
         success: false,
         error: `Place "${query}" not found`,
         timestamp: new Date().toISOString(),
       });
     }
+
+    dispatch({ type: "destination.lookup.success", query: query as string, source: "geocode" });
 
     const response: ApiResponse<Coordinate> = {
       success: true,
@@ -68,6 +79,8 @@ router.get("/destination/lookup", async (req: Request, res: Response) => {
     };
     res.json(response);
   } catch (error) {
+    const classified = classifyInfraError(error);
+    dispatch({ type: "destination.lookup.error", query: query as string, error: classified });
     res.status(500).json({
       success: false,
       error: "Failed to lookup destination",
@@ -80,7 +93,7 @@ router.post("/distance", (req: Request, res: Response) => {
   try {
     const { from, to } = req.body;
 
-    if (!from || !to || !from.lat || !from.lng || !to.lat || !to.lng) {
+    if (!from || !to || from.lat == null || from.lng == null || to.lat == null || to.lng == null) {
       return res.status(400).json({
         success: false,
         error: "Invalid coordinates format. Expected: { from: {lat, lng}, to: {lat, lng} }",
@@ -88,7 +101,33 @@ router.post("/distance", (req: Request, res: Response) => {
       });
     }
 
+    if (isNaN(Number(from.lat)) || isNaN(Number(from.lng)) || isNaN(Number(to.lat)) || isNaN(Number(to.lng))) {
+      return res.status(400).json({
+        success: false,
+        error: "Coordinates must be numeric",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (Number(from.lat) < -90 || Number(from.lat) > 90 || Number(to.lat) < -90 || Number(to.lat) > 90) {
+      return res.status(400).json({
+        success: false,
+        error: "Latitude must be between -90 and 90",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (Number(from.lng) < -180 || Number(from.lng) > 180 || Number(to.lng) < -180 || Number(to.lng) > 180) {
+      return res.status(400).json({
+        success: false,
+        error: "Longitude must be between -180 and 180",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const distance = calculateDistance(from, to);
+
+    dispatch({ type: "distance.calculated", distanceMeters: distance });
 
     const response: ApiResponse<{ distance: number; distanceKm: number; unit: string }> = {
       success: true,
@@ -110,46 +149,87 @@ router.post("/distance", (req: Request, res: Response) => {
 });
 
 router.get("/stations/search", async (req: Request, res: Response) => {
-  try {
-    const {query, limit, transportType} = req.query;
+  const { query, limit, transportType } = req.query;
 
-    if (!query) {
+  if (!query) {
+    return res.status(400).json({
+      success: false,
+      error: "Missing query parameter",
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  try {
+    
+    if ((query as string).length > 200) {
       return res.status(400).json({
         success: false,
-        error: "Missing query parameter",
+        error: "Query too long (max 200 characters)",
         timestamp: new Date().toISOString(),
       });
     }
 
+    if (limit !== undefined) {
+      const limitNum = Number(limit);
+      if (isNaN(limitNum) || !Number.isInteger(limitNum)) {
+        return res.status(400).json({
+          success: false,
+          error: "Limit must be an integer",
+          timestamp: new Date().toISOString(),
+        });
+      }
+      if (limitNum < 0) {
+        return res.status(400).json({
+          success: false,
+          error: "Limit must not be negative",
+          timestamp: new Date().toISOString(),
+        });
+      }
+      if (limitNum > 100) {
+        return res.status(400).json({
+          success: false,
+          error: "Limit must not exceed 100",
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+    
     const ptvStops = await ptvSearchStops(query as string);
 
-    const results = ptvStops
-      .slice(0, Number(limit) || 50)
-      .filter((s) => {
-        if (transportType) {
-          if (transportType === "train") {
-            return s.routeType.includes(0);
-          } else if (transportType === "tram") {
-            return s.routeType.includes(1);
-          } else if (transportType === "bus") {
-            return s.routeType.includes(2);
-          }
+    const filtered = ptvStops.filter((s) => {
+      if (transportType) {
+        if (transportType === "train") {
+          return s.routeType.includes(0);
+        } else if (transportType === "tram") {
+          return s.routeType.includes(1);
+        } else if (transportType === "bus") {
+          return s.routeType.includes(2);
         }
-        return true;
-      })
+      }
+      return true;
+    });
+
+    const pageLimit = Number(limit) || 50;
+    const results = filtered
+      .slice(0, pageLimit)
       .map((s) => ({
         name: s.displayName,
         position: s.position,
         transportTypes: s.routeType?.length ? s.routeType.map((t) => (["train", "tram", "bus"][t]) as TransportType) : (["train"] as TransportType[]),
       }));
 
-    const response: ApiResponse<{ name: string; position: Coordinate; transportTypes: TransportType[] }[]> = {
+    dispatch({ type: "stations.search.success", query: query as string, count: results.length });
+
+    res.json({
       success: true,
       data: results,
+      total: filtered.length,
+      truncated: filtered.length > pageLimit,
       timestamp: new Date().toISOString(),
-    };
-    res.json(response);
+    });
   } catch (error) {
+    const classified = classifyInfraError(error);
+    dispatch({ type: "stations.search.error", query: query as string, error: classified });
     res.status(500).json({
       success: false,
       error: "Failed to search stations",
@@ -168,8 +248,7 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       departureTime?: string;
     };
 
-    // Validate coordinates
-    if (!origin || !destination || !origin.lat || !origin.lng || !destination.lat || !destination.lng) {
+    if (!origin || !destination || origin.lat == null || origin.lng == null || destination.lat == null || destination.lng == null) {
       return res.status(400).json({
         success: false,
         error: "Invalid coordinates. Expected: { origin: {lat, lng}, destination: {lat, lng} }",
@@ -177,13 +256,73 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       });
     }
 
-    // Validate strategy
+    if (isNaN(Number(origin.lat)) || isNaN(Number(origin.lng)) || isNaN(Number(destination.lat)) || isNaN(Number(destination.lng))) {
+      return res.status(400).json({
+        success: false,
+        error: "Coordinates must be numeric",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (Number(origin.lat) < -90 || Number(origin.lat) > 90 || Number(destination.lat) < -90 || Number(destination.lat) > 90) {
+      return res.status(400).json({
+        success: false,
+        error: "Latitude must be between -90 and 90",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (Number(origin.lng) < -180 || Number(origin.lng) > 180 || Number(destination.lng) < -180 || Number(destination.lng) > 180) {
+      return res.status(400).json({
+        success: false,
+        error: "Longitude must be between -180 and 180",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (waypoints && waypoints.length > 20) {
+      return res.status(400).json({
+        success: false,
+        error: "Too many waypoints (max 20)",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     if (!strategy || !["car", "ptv"].includes(strategy)) {
       return res.status(400).json({
         success: false,
         error: "Invalid strategy. Must be: 'car' or 'ptv'",
         timestamp: new Date().toISOString(),
       });
+    }
+
+    if (departureTime !== undefined && !/^\d{2}:\d{2}(:\d{2})?$/.test(departureTime)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid departureTime format. Expected HH:MM or HH:MM:SS",
+        timestamp: new Date().toISOString(),
+      });
+    }
+    const invalidWaypointEarly = (waypoints || []).find(
+      (w) => !w || !w.position || w.position.lat == null || w.position.lng == null
+    );
+    if (invalidWaypointEarly) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid waypoint: each waypoint must have a position with lat and lng",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (departureTime !== undefined) {
+      const parts = departureTime.split(":").map(Number);
+      if (parts[0] < 0 || parts[0] > 23 || parts[1] < 0 || parts[1] > 59 || (parts[2] !== undefined && (parts[2] < 0 || parts[2] > 59))) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid departureTime: hours must be 0-23, minutes and seconds must be 0-59",
+          timestamp: new Date().toISOString(),
+        });
+      }
     }
 
     // Normalise departure time: accept "HH:MM" or "HH:MM:SS", default to now
@@ -201,13 +340,15 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
     };
 
     const { segments, totalDistance, totalDuration } = await strategies[strategy].execute(cmd);
+    dispatch({ type: "route.calculated", strategy, legs: segments.length, totalDistanceMeters: totalDistance, totalDurationSeconds: totalDuration });
 
-    // Fetch departure info for PTV journeys
     const departureInfo = strategy !== "car"
       ? await fetchDepartureInfo(waypoints || [])
       : undefined;
 
     const arrivalTime = new Date(Date.now() + totalDuration * 1000);
+
+    const failedLegsCount = segments.filter((s) => s.type === "failed").length;
 
     const result: RouteResult = {
       segments,
@@ -215,6 +356,7 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       totalDuration,
       estimatedArrival: arrivalTime.toISOString(),
       departureInfo: departureInfo?.length ? departureInfo : undefined,
+      failedLegs: failedLegsCount,
     };
 
     const response: ApiResponse<RouteResult> = {
@@ -222,7 +364,7 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
       data: result,
       timestamp: new Date().toISOString(),
     };
-    const hasFailures = segments.some((s) => s.type === "failed");
+    const hasFailures = failedLegsCount > 0;
     res.status(hasFailures ? 207 : 200).json(response);
   } catch (error) {
     if (error instanceof PtvValidationError) {
@@ -232,7 +374,8 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
         timestamp: new Date().toISOString(),
       });
     }
-    console.error(error);
+    const classified = classifyInfraError(error);
+    dispatch({ type: "route.error", strategy: String(req.body?.strategy ?? "unknown"), error: classified });
     res.status(500).json({
       success: false,
       error: "Failed to calculate route",
@@ -253,11 +396,51 @@ router.get("/streets/search", (req: Request, res: Response) => {
       });
     }
 
-    const results = searchStreets(query as string, Number(limit) || 20);
+    if ((query as string).length > 200) {
+      return res.status(400).json({
+        success: false,
+        error: "Query too long (max 200 characters)",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (limit !== undefined) {
+      const limitNum = Number(limit);
+      if (isNaN(limitNum) || !Number.isInteger(limitNum)) {
+        return res.status(400).json({
+          success: false,
+          error: "Limit must be an integer",
+          timestamp: new Date().toISOString(),
+        });
+      }
+      if (limitNum < 0) {
+        return res.status(400).json({
+          success: false,
+          error: "Limit must not be negative",
+          timestamp: new Date().toISOString(),
+        });
+      }
+      if (limitNum > 100) {
+        return res.status(400).json({
+          success: false,
+          error: "Limit must not exceed 100",
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+
+    const streetLimit = Number(limit) || 20;
+    const allStreets = searchStreets(query as string, Infinity);
+    const results = allStreets.slice(0, streetLimit);
+
+
+    dispatch({ type: "streets.search.success", query: query as string, count: results.length });
 
     res.json({
       success: true,
       data: results,
+      total: allStreets.length,
+      truncated: allStreets.length > streetLimit,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -281,15 +464,78 @@ router.get("/streets/nearby", (req: Request, res: Response) => {
       });
     }
 
-    const results = nearbyStreets(
+    if (isNaN(Number(lat)) || isNaN(Number(lng))) {
+      return res.status(400).json({
+        success: false,
+        error: "lat and lng must be numeric",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (radius !== undefined && isNaN(Number(radius))) {
+      return res.status(400).json({
+        success: false,
+        error: "radius must be numeric",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (Number(lat) < -90 || Number(lat) > 90) {
+      return res.status(400).json({
+        success: false,
+        error: "Latitude must be between -90 and 90",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (Number(lng) < -180 || Number(lng) > 180) {
+      return res.status(400).json({
+        success: false,
+        error: "Longitude must be between -180 and 180",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (limit !== undefined) {
+      const limitNum = Number(limit);
+      if (isNaN(limitNum) || !Number.isInteger(limitNum)) {
+        return res.status(400).json({
+          success: false,
+          error: "Limit must be an integer",
+          timestamp: new Date().toISOString(),
+        });
+      }
+      if (limitNum < 0) {
+        return res.status(400).json({
+          success: false,
+          error: "Limit must not be negative",
+          timestamp: new Date().toISOString(),
+        });
+      }
+      if (limitNum > 100) {
+        return res.status(400).json({
+          success: false,
+          error: "Limit must not exceed 100",
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+
+    const nearbyLimit = Number(limit) || 20;
+    const allNearby = nearbyStreets(
       { lat: Number(lat), lng: Number(lng) },
       Number(radius) || 200,
-      Number(limit) || 20,
+      Infinity,
     );
+    const results = allNearby.slice(0, nearbyLimit);
+
+    dispatch({ type: "streets.nearby.success", lat: Number(lat), lng: Number(lng), count: results.length });
 
     res.json({
       success: true,
       data: results,
+      total: allNearby.length,
+      truncated: allNearby.length > nearbyLimit,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

@@ -2,8 +2,9 @@ import fs from "fs";
 import path from "path";
 import { RaptorCore, RaptorJourney } from "./raptor-core";
 import { streamFeedData, StreamStop, StreamTrip, StreamStopTime } from "./gtfs-stream.service";
+import { dispatch } from "../events/dispatch";
 
-const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
+const log = (..._args: unknown[]) => {};
 
 interface GTFSData {
   raptor: RaptorCore | null;
@@ -51,7 +52,7 @@ export async function loadRaptorStreaming(): Promise<void> {
   const absoluteRoot = path.resolve(process.cwd(), gtfsRoot);
 
   if (!fs.existsSync(absoluteRoot)) {
-    console.warn("[Raptor] GTFS root not found, skipping.");
+    dispatch({ type: "infra.missing_data", resource: absoluteRoot, message: "GTFS root not found, skipping Raptor load." });
     return;
   }
 
@@ -68,7 +69,7 @@ export async function loadRaptorStreaming(): Promise<void> {
     });
 
   if (trainFeeds.length === 0) {
-    console.warn("[Raptor] No train feeds found.");
+    dispatch({ type: "infra.missing_data", resource: absoluteRoot, message: "No train feeds found, skipping Raptor load." });
     return;
   }
 

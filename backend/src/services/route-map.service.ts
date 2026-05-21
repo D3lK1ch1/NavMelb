@@ -4,8 +4,7 @@ import { findStopCoordinate } from "./gtfs-stop-indexservice";
 import { geocodeAddress } from "./geocoding.service";
 import { ptvFindRouteBetweenStops } from "./ptv-api.service";
 import axios from "axios";
-
-const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
+import { dispatch } from "../events/dispatch";
 
 export function calculateDistance(coord1: Coordinate, coord2: Coordinate): number {
   return distanceMeters(coord1, coord2);
@@ -49,7 +48,7 @@ export async function osrmRoute(
       duration: route.duration,
     };
   } catch (error) {
-    console.error("OSRM request failed, using fallback:", error);
+    dispatch({ type: "external.api.failed", service: "osrm", endpoint: url, error });
     const dist = calculateDistance(start, end);
     return {
       geometry: [
@@ -68,10 +67,7 @@ export async function getPTVRoute(
   fromName?: string,
   toName?: string
 ): Promise<{ geometry: number[][]; duration: number } | null> {
-  log(`[getPTVRoute] fromName="${fromName}", toName="${toName}"`);
-
   if (!fromName || !toName) {
-    log(`[getPTVRoute] NULL: Missing station names`);
     return null;
   }
 
@@ -83,7 +79,6 @@ export async function getPTVRoute(
     return { geometry, duration: ptvRoute.durationSeconds };
   }
 
-  log(`[getPTVRoute] NULL: No route found for "${fromName}" -> "${toName}"`);
   return null;
 }
 
