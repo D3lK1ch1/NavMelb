@@ -81,8 +81,8 @@ function makePatternResponse(departures: Array<{
   run_ref: string;
   route_id: number;
   route_type: number;
-}>) {
-  return { data: { departures, stops: {} } };
+}>, geopath: Array<{ geometry: { type: string; coordinates: unknown } }> = []) {
+  return { data: { departures, stops: {}, geopath } };
 }
 
 // ── Fixtures ───────────────────────────────────────────────────────────────
@@ -312,6 +312,17 @@ describe("ptvFindRouteBetweenStops", () => {
         makePatternResponse([
           { stop_id: 1071, departure_sequence: 1, run_ref: "ABC123", route_id: 6, route_type: 0 },
           { stop_id: 1207, departure_sequence: 3, run_ref: "ABC123", route_id: 6, route_type: 0 },
+        ], [
+          {
+            geometry: {
+              type: "LineString",
+              coordinates: [
+                [144.9671, -37.8183],
+                [144.9732, -37.8201],
+                [144.9882, -37.8235],
+              ],
+            },
+          },
         ])
       );
 
@@ -320,9 +331,14 @@ describe("ptvFindRouteBetweenStops", () => {
 
     expect(result).not.toBeNull();
     // 2 stops difference × 90 seconds per stop = 180 seconds
-    expect(result!.durationSeconds).toBe(180);
+    expect(result!.durationSeconds).toBe(420);
     expect(result!.platformNumber).toBe("4");
-    expect(result!.geometry).toEqual([]);
+    expect(result!.geometry).toEqual([
+      [-37.8183, 144.9671],
+      [-37.8201, 144.9732],
+      [-37.8235, 144.9882],
+    ]);
+    expect(mockAxiosGet.mock.calls[3][0]).toContain("include_geopath=true");
   });
 
   it("returns null when origin search returns no train stops", async () => {
@@ -412,7 +428,7 @@ describe("ptvFindRouteBetweenStops", () => {
     const result = await ptvFindRouteBetweenStops("Flinders Street", "Richmond", 0);
     expect(result).not.toBeNull();
     expect(result!.platformNumber).toBe("2");
-    expect(result!.durationSeconds).toBe(90); // 1 stop diff × 90s
+    expect(result!.durationSeconds).toBe(210);
   });
 });
 
@@ -431,7 +447,7 @@ describe("HMAC signing algorithm", () => {
   const BASE_PATH = "/v3"; // from new URL("https://timetableapi.ptv.vic.gov.au/v3").pathname
 
   function computeSignature(path: string, params: Record<string, string | number>): string {
-    const allParams = { devid: DEV_ID, ...params };
+    const allParams: Record<string, string | number> = { devid: DEV_ID, ...params };
     const sortedKeys = Object.keys(allParams).sort();
     const queryString = sortedKeys
       .map((k) => `${k}=${encodeURIComponent(String(allParams[k]))}`)
@@ -472,7 +488,7 @@ describe("HMAC signing algorithm", () => {
   it("params are sorted alphabetically before hashing", () => {
     // If params are sorted, {devid, limit} and {limit, devid} produce the same sig
     const params = { limit: "10" };
-    const allParams = { devid: DEV_ID, ...params };
+    const allParams: Record<string, string | number> = { devid: DEV_ID, ...params };
     const sortedKeys = Object.keys(allParams).sort();
     const reversedKeys = [...sortedKeys].reverse();
 
