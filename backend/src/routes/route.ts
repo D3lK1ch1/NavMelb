@@ -22,11 +22,11 @@ async function fetchDepartureInfo(waypoints: Waypoint[]): Promise<DepartureInfo[
     stationWaypoints.map(async (w) => {
       const stopInfo = await ptvFindStopByName(w.name!);
       if (!stopInfo) return null;
-      const deps = await ptvGetDepartures(0, stopInfo.stopId, { limit: 1 });
+      const deps = await ptvGetDepartures(0, stopInfo.stopId, { limit: 10 });
       if (!deps.length) return null;
-      const firstDep = deps[0];
-      const scheduled = new Date(firstDep.scheduledDepartureUtc);
       const now = new Date();
+      const firstDep = deps.find(d => new Date(d.scheduledDepartureUtc) > now) ?? deps[0];
+      const scheduled = new Date(firstDep.scheduledDepartureUtc);
       const waitMs = scheduled.getTime() - now.getTime();
       const waitMinutes = Math.max(0, Math.ceil(waitMs / 60000));
       return {
@@ -168,31 +168,6 @@ router.get("/stations/search", async (req: Request, res: Response) => {
         timestamp: new Date().toISOString(),
       });
     }
-
-    if (limit !== undefined) {
-      const limitNum = Number(limit);
-      if (isNaN(limitNum) || !Number.isInteger(limitNum)) {
-        return res.status(400).json({
-          success: false,
-          error: "Limit must be an integer",
-          timestamp: new Date().toISOString(),
-        });
-      }
-      if (limitNum < 0) {
-        return res.status(400).json({
-          success: false,
-          error: "Limit must not be negative",
-          timestamp: new Date().toISOString(),
-        });
-      }
-      if (limitNum > 100) {
-        return res.status(400).json({
-          success: false,
-          error: "Limit must not exceed 100",
-          timestamp: new Date().toISOString(),
-        });
-      }
-    }
     
     const ptvStops = await ptvSearchStops(query as string);
 
@@ -209,7 +184,7 @@ router.get("/stations/search", async (req: Request, res: Response) => {
       return true;
     });
 
-    const pageLimit = Number(limit) || 50;
+    const pageLimit = limit !== undefined && !isNaN(Number(limit)) ? Number(limit) : 50;
     const results = filtered
       .slice(0, pageLimit)
       .map((s) => ({
@@ -396,39 +371,6 @@ router.get("/streets/search", (req: Request, res: Response) => {
       });
     }
 
-    if ((query as string).length > 200) {
-      return res.status(400).json({
-        success: false,
-        error: "Query too long (max 200 characters)",
-        timestamp: new Date().toISOString(),
-      });
-    }
-
-    if (limit !== undefined) {
-      const limitNum = Number(limit);
-      if (isNaN(limitNum) || !Number.isInteger(limitNum)) {
-        return res.status(400).json({
-          success: false,
-          error: "Limit must be an integer",
-          timestamp: new Date().toISOString(),
-        });
-      }
-      if (limitNum < 0) {
-        return res.status(400).json({
-          success: false,
-          error: "Limit must not be negative",
-          timestamp: new Date().toISOString(),
-        });
-      }
-      if (limitNum > 100) {
-        return res.status(400).json({
-          success: false,
-          error: "Limit must not exceed 100",
-          timestamp: new Date().toISOString(),
-        });
-      }
-    }
-
     const streetLimit = Number(limit) || 20;
     const allStreets = searchStreets(query as string, Infinity);
     const results = allStreets.slice(0, streetLimit);
@@ -521,7 +463,7 @@ router.get("/streets/nearby", (req: Request, res: Response) => {
       }
     }
 
-    const nearbyLimit = Number(limit) || 20;
+    const nearbyLimit = limit !== undefined && !isNaN(Number(limit)) ? Number(limit) : 20;
     const allNearby = nearbyStreets(
       { lat: Number(lat), lng: Number(lng) },
       Number(radius) || 200,
