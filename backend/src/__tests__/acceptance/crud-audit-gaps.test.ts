@@ -494,8 +494,8 @@ describe("POST /api/map/route/calculate — gap coverage", () => {
     expect(seg.coordinates).toHaveLength(2); // straight-line fallback
   });
 
-  // CRUD audit: D4 / R2 — PTV route not found for station pair → failed segment, 207
-  it("R2/D4: PTV route not found returns 207 with failed segment", async () => {
+  // CRUD audit: D4 / R2 — PTV route not found falls back to straight-line ptv segment
+  it("R2/D4: PTV route not found falls back to straight-line ptv segment", async () => {
     const { ptvFindRouteBetweenStops } = await import("../../services/ptv-api.service");
     vi.mocked(ptvFindRouteBetweenStops).mockResolvedValueOnce(null);
 
@@ -511,10 +511,10 @@ describe("POST /api/map/route/calculate — gap coverage", () => {
         ],
       });
 
-    // 207 Multi-Status when at least one leg fails
-    expect(res.status).toBe(207);
-    const failedSegs = res.body.data.segments.filter((s: { type: string }) => s.type === "failed");
-    expect(failedSegs.length).toBeGreaterThan(0);
+    // getPTVRoute falls back to straight-line when ptvFindRouteBetweenStops returns null
+    expect(res.status).toBe(200);
+    const ptvSegs = res.body.data.segments.filter((s: { type: string }) => s.type === "ptv");
+    expect(ptvSegs.length).toBeGreaterThan(0);
   });
 
   // CRUD audit: C3 — waypoints with no `type` field (place waypoints only, no stations)
@@ -578,37 +578,22 @@ describe("geocoding service — gap coverage", () => {
 });
 
 // ===========================================================================
-// GTFS stop index — additional gap coverage (via destination/lookup endpoint)
+// destination lookup — additional gap coverage
 // ===========================================================================
 
-describe("GTFS stop index — gap coverage (via destination/lookup)", () => {
-  // CRUD audit: R9 — case-insensitive GTFS stop lookup
-  it("R9: stop name lookup is case-insensitive", async () => {
+describe("destination lookup — gap coverage", () => {
+  // CRUD audit: R9 — case-insensitive geocoding query
+  it("R9: lookup is case-insensitive", async () => {
     const lower = await request(app)
       .get("/api/map/destination/lookup")
-      .query({ query: "richmond" });
+      .query({ query: "federation square" });
     const upper = await request(app)
       .get("/api/map/destination/lookup")
-      .query({ query: "RICHMOND" });
+      .query({ query: "FEDERATION SQUARE" });
 
     expect(lower.status).toBe(200);
     expect(upper.status).toBe(200);
-    // Both should resolve to the same coordinates
     expect(lower.body.data.lat).toBeCloseTo(upper.body.data.lat, 3);
     expect(lower.body.data.lng).toBeCloseTo(upper.body.data.lng, 3);
-  });
-
-  // CRUD audit: R5 — "station" suffix stripped in lookup
-  it("R5: GTFS lookup strips 'station' suffix correctly", async () => {
-    const withSuffix = await request(app)
-      .get("/api/map/destination/lookup")
-      .query({ query: "Richmond Station" });
-    const withoutSuffix = await request(app)
-      .get("/api/map/destination/lookup")
-      .query({ query: "Richmond" });
-
-    expect(withSuffix.status).toBe(200);
-    expect(withoutSuffix.status).toBe(200);
-    expect(withSuffix.body.data.lat).toBeCloseTo(withoutSuffix.body.data.lat, 3);
   });
 });

@@ -2,13 +2,12 @@ import { describe, it, expect, beforeAll, vi } from "vitest";
 import request from "supertest";
 import type { Express } from "express";
 import { createTestApp } from "../helpers/create-app";
-import { ptvFindRouteBetweenStops, ptvFindStopByName, ptvGetDepartures } from "../../services/ptv-api.service";
+import { ptvFindRouteBetweenStops } from "../../services/ptv-api.service";
 
-// Mock axios for OSRM calls
 vi.mock("axios", () => ({
   default: {
     get: vi.fn(async (url: string) => {
-      if (url.includes("router.project-osrm.org")) {
+      if (url.includes("/route/v1/driving/")) {
         return {
           data: {
             code: "Ok",
@@ -90,7 +89,7 @@ describe("POST /api/map/route/calculate", () => {
   });
 
   describe("ptv strategy", () => {
-    it("returns mixed car+ptv segments for place→station→station→place chain", async () => {
+    it("returns mixed car and ptv segments for a place to station to station to place chain", async () => {
       const res = await request(app)
         .post("/api/map/route/calculate")
         .send({
@@ -103,13 +102,10 @@ describe("POST /api/map/route/calculate", () => {
           ],
         });
 
-      // origin(place) → Flinders(station) → car
-      // Flinders(station) → Richmond(station) → ptv
-      // Richmond(station) → destination(place) → car
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       const segments = res.body.data.segments;
-      expect(segments.length).toBeGreaterThanOrEqual(1);
+      expect(segments.map((s: { type: string }) => s.type)).toEqual(["car", "ptv", "car"]);
       const ptvSegs = segments.filter((s: { type: string }) => s.type === "ptv");
       expect(ptvSegs.length).toBeGreaterThan(0);
       for (const seg of segments) {
@@ -162,7 +158,7 @@ describe("POST /api/map/route/calculate", () => {
   });
 
   describe("ptv mixed waypoints", () => {
-    it("produces car+ptv+car when place→station→station→place", async () => {
+    it("produces car, ptv, car when intermediate station stops are adjacent", async () => {
       const res = await request(app)
         .post("/api/map/route/calculate")
         .send({
@@ -215,6 +211,39 @@ describe("POST /api/map/route/calculate", () => {
 
       expect(res.status).toBe(400);
       expect(res.body.error).toMatch(/invalid strategy/i);
+    });
+  });
+
+  describe("ptv multi-station train chain", () => {
+    it("place -> train -> train -> station produces car, ptv, ptv", async () => {
+      const res = await request(app)
+        .post("/api/map/route/calculate")
+        .send({
+          origin: { lat: -37.9150, lng: 145.1300 },
+          originType: "place",
+          destination: { lat: -37.8183, lng: 144.9671 },
+          destinationType: "station",
+          destinationName: "Flinders Street Station",
+          strategy: "ptv",
+          waypoints: [
+            {
+              position: { lat: -37.9185, lng: 145.1231 },
+              type: "station",
+              name: "Clayton Station",
+              transportTypes: ["train"],
+            },
+            {
+              position: { lat: -37.8770, lng: 145.0428 },
+              type: "station",
+              name: "Caulfield Station",
+              transportTypes: ["train"],
+            },
+          ],
+        });
+
+      expect(res.status).toBe(200);
+      const types = res.body.data.segments.map((s: { type: string }) => s.type);
+      expect(types).toEqual(["car", "ptv", "ptv"]);
     });
   });
 });

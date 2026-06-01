@@ -19,10 +19,10 @@ describe("GET /api/map/destination/lookup", () => {
     app = await createTestApp();
   });
 
-  it("returns coordinates for a known GTFS stop", async () => {
+  it("returns coordinates for a geocoded place", async () => {
     const res = await request(app)
       .get("/api/map/destination/lookup")
-      .query({ query: "Richmond" });
+      .query({ query: "Federation Square" });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
