@@ -6,10 +6,50 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+  ## [0.12.0] — 2026-06-01 — GTFS Removed, v0 Beta
+
+  ### Removed
+  - `gtfs-stop-indexservice.ts`, `gtfs-raptor-streaming.service.ts`, `raptor-core.ts` — deleted;
+  GTFS/RAPTOR no longer part of the codebase
+  - Dead functions from `route-map.service.ts`: `chainJourneyLegs`, `calculateMultiStopRoute`,
+  `addSecondsToTime`, `ChainResult` type
+  - `GTFS_ROOT` env var from `backend/.env.example`
+  - `lookupDestinationAny` wrapper — `geocodeAddress` now called directly in `route.ts`
+
+  ### Changed
+  - `create-app.ts` test helper — removed GTFS loading calls; boots without data files
+  - `route.ts` `/destination/lookup` — imports `geocodeAddress` directly from `geocoding.service`
+
+  ### Verified
+  - Train routing end-to-end: place → station → station chain confirmed (Clayton → Caulfield →
+  Flinders Street, 61min)
+
+  ### Known limitations
+  - Tram and bus routing not yet working — frontend strategy selection fix in progress
+  - Transfer routing requires manually adding intermediate station stops
+  - Car legs use straight-line Haversine estimate (OSRM not deployed in v0)
+
+## [0.11.0] — 2026-05-21 — Strategy Refactor + Validation Contract + Tests & Architecture Refactors
+
+### Changed
+- `route.ts` `/route/calculate` — routing logic extracted into `CarStrategy` and `PtvStrategy` classes; handler now delegates to `strategies[strategy].execute(cmd)` instead of inline `if/else` blocks
+- `route.ts` `/stations/search`, `/streets/search`, `/streets/nearby` — limit validation changed from strict (400 on invalid) to lenient (fall back to default); aligns with reviewer-defined API contract
+
+### Added
+- `CarStrategy`, `PtvStrategy` classes under `src/strategies/` — encapsulate per-strategy routing logic and dispatch events internally
+- `PtvValidationError` — thrown by `PtvStrategy` for domain validation failures; caught in route handler and returned as 400 instead of 500
+- `fetchDepartureInfo()` helper extracted from `/route/calculate` handler
+-
+
+### Fixed
+- `limit=0` returned default number of results instead of empty array — `Number("0") || default` treated `0` as falsy; replaced with `limit !== undefined && !isNaN(Number(limit)) ? Number(limit) : default` in `stations/search` and `streets/nearby`
+
+---
+
 ## [0.10.0] — 2026-05-02 — PTV-Only Architecture + Test Infrastructure
 
 ### Changed
-- **RAPTOR + GTFS removed from startup** — server boots instantly (~750MB RAM saved, ~60s startup eliminated); PTV API is now the sole transit data source
+- **RAPTOR + GTFS removed from startup** — server boots instantly (~750MB RAM saved, ~60s startup eliminated); PTV API is now the sole transit data source (Ongoing changes)
 - `index.ts` — removed `loadGtfsStops()`, `loadGtfsTimetables()`, `loadRaptorStreaming()`, `loadRouteAssociations()` on startup
 - `route-map.service.ts` — removed RAPTOR branch and GTFS fallback; `getPTVRoute()` calls PTV API only
 - `ptv-api.service.ts` — full rewrite: `ptvGetPatternWithStops()` reads correct `departures[]` shape; `/pattern` endpoint uses path params (`/run/{run_ref}/route_type/{route_type}`); `ptvFindStopByName` uses `pickBestStop()`; timeout raised to 30s
@@ -25,7 +65,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `routeType` number mapping in `/stations/search` — `0=train`, `1=tram`, `2=bus`; previous filter had train and tram swapped
 
 ### Removed
-- RAPTOR + GTFS fallback path from `getPTVRoute()` — PTV API only; archived in session notes for revert
+- RAPTOR + GTFS fallback path from `getPTVRoute()` — PTV API only; archived in session notes for revert (ongoing, until it is all fixed)
 - `getAllStops` import from `route.ts` — was unused after GTFS removal
 
 ---
