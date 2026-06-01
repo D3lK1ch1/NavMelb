@@ -7,27 +7,34 @@ import MapComponent from "../components/MapComponent";
 import { mapExplorationStyles as styles } from "../styles/mapExploration";
 
 type StationSearchResult = { name: string; position: Coordinate; transportTypes: TransportType[]; displayName?: string; routeNames?: string[] };
+type JourneyStop = { coord: Coordinate; name: string; type: "place" | "station"; transportTypes?: TransportType[] };
+type ApiErrorShape = { response?: { data?: { error?: unknown } }; message?: unknown };
 
-// A single stop in the journey chain: A -> B -> C -> ...
-type JourneyStop = {
-  coord: Coordinate;
-  name: string;
-  type: "place" | "station";
-};
-
-// Label stops as A, B, C, D...
 const stopLabel = (index: number) => String.fromCharCode(65 + index);
 
-// Format current time as "HH:MM" for the departure time input default
 function nowAsTimeString(): string {
   const now = new Date();
   return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 }
 
 function transportIcon(types: TransportType[]): string {
-  if (types.includes("train")) return "train";
-  if (types.includes("tram")) return "tram";
-  return "bus";
+  if (types.includes("train")) return "Train";
+  if (types.includes("tram")) return "Tram";
+  return "Bus";
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error !== "object" || error === null) return fallback;
+  const shaped = error as ApiErrorShape;
+  const apiError = shaped.response?.data?.error;
+  if (typeof apiError === "string" && apiError.length > 0) return apiError;
+  if (typeof shaped.message === "string" && shaped.message.length > 0) return shaped.message;
+  return fallback;
+}
+
+function isRouteSegment(segment: RouteSegment | FailedLeg): segment is RouteSegment {
+  return segment.type !== "failed";
 }
 
 export const MapExplorationScreen: React.FC = () => {
@@ -43,10 +50,10 @@ export const MapExplorationScreen: React.FC = () => {
   const [searchMode, setSearchMode] = useState<"place" | "station">("place");
   const [transportFilter] = useState<"tram" | "train" | "bus" | undefined>(undefined);
   const requestGenRef = useRef(0);
-  const stratergy: RouteStrategy = stops.some((stop, i) => i > 0 && stop.type === "station") ? "ptv" : "car";
+  const strategy: RouteStrategy = stops.slice(1, -1).some((stop) => stop.type === "station") ? "ptv" : "car";
 
-  const addStop = (coord: Coordinate, name: string, type: "place" | "station") => {
-    setStops((prev) => [...prev, { coord, name, type }]);
+  const addStop = (coord: Coordinate, name: string, type: "place" | "station", transportTypes?: TransportType[]) => {
+    setStops((prev) => [...prev, { coord, name, type, transportTypes }]);
   };
 
   const removeStop = (index: number) => {
@@ -73,11 +80,10 @@ export const MapExplorationScreen: React.FC = () => {
       }
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const coord: Coordinate = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      // Insert location at the front of the chain as the starting point
       setStops((prev) => [{ coord, name: "My Location", type: "place" }, ...prev]);
       setShowMap(true);
-    } catch (err: any) {
-      setError(err?.message || "Failed to get location");
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Failed to get location"));
     } finally {
       setLoading(false);
     }
@@ -86,33 +92,36 @@ export const MapExplorationScreen: React.FC = () => {
   const calculateRoutePreview = useCallback(async () => {
     if (stops.length < 2) return;
 
-    // Increment generation — any in-flight request from a previous generation will be discarded
     const myGeneration = ++requestGenRef.current;
-
     setLoading(true);
     setError(null);
     setRouteResult(null);
     setRouteSegments([]);
 
     try {
-      const origin = stops[0].coord;
-      const destination = stops[stops.length - 1].coord;
-
-      const waypoints: Waypoint[] = stops.map((s) => ({
+      const firstStop = stops[0];
+      const lastStop = stops[stops.length - 1];
+      const origin = firstStop.coord;
+      const destination = lastStop.coord;
+      const waypoints: Waypoint[] = stops.slice(1, -1).map((s) => ({
         position: s.coord,
         type: s.type,
         name: s.name,
+        transportTypes: s.transportTypes,
       }));
 
       const response: ApiResponse<RouteResult> = await calculateRoute(
         origin,
         destination,
-        stratergy,
+        strategy,
         waypoints,
-        departureTime
+        departureTime,
+        firstStop.type,
+        firstStop.name,
+        lastStop.type,
+        lastStop.name,
       );
 
-      // Discard if a newer request has already started
       if (requestGenRef.current !== myGeneration) return;
 
       if (response.success && response.data) {
@@ -121,19 +130,15 @@ export const MapExplorationScreen: React.FC = () => {
       } else {
         setError(response.error || "Route calculation failed");
       }
-    } catch (err) {
+    } catch (err: unknown) {
       if (requestGenRef.current !== myGeneration) return;
-      const message =
-        (err as any)?.response?.data?.error ||
-        (err as any)?.message ||
-        "Route preview failed";
-      setError(message);
+      setError(getErrorMessage(err, "Route preview failed"));
     } finally {
       if (requestGenRef.current === myGeneration) {
         setLoading(false);
       }
     }
-  }, [stops, stratergy, departureTime]);
+  }, [stops, strategy, departureTime]);
 
   useEffect(() => {
     if (stops.length >= 2) {
@@ -142,7 +147,7 @@ export const MapExplorationScreen: React.FC = () => {
       setRouteResult(null);
       setRouteSegments([]);
     }
-  }, [stops, stratergy, departureTime, calculateRoutePreview]);
+  }, [stops, strategy, departureTime, calculateRoutePreview]);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
@@ -170,15 +175,15 @@ export const MapExplorationScreen: React.FC = () => {
           setError(response.error || "Place not found");
         }
       }
-    } catch (err: any) {
-      setError(err.message || "Search failed");
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Search failed"));
     } finally {
       setLoading(false);
     }
   };
 
   const handleSelectStation = (station: StationSearchResult) => {
-    addStop(station.position, station.name, "station");
+    addStop(station.position, station.name, "station", station.transportTypes);
     setSearchResults([]);
     setSearchQuery("");
   };
@@ -209,13 +214,12 @@ export const MapExplorationScreen: React.FC = () => {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       {showMap && (
         <View style={{ flex: 1 }}>
           <MapComponent
             markers={getMarkers()}
-            routeSegments={routeSegments.filter(s => s.type !== "failed") as RouteSegment[]}
+            routeSegments={routeSegments.filter(isRouteSegment)}
             onMapClick={({ lat, lng }) => {
               addStop({ lat, lng }, "Picked location", "place");
               setShowMap(true);
@@ -228,7 +232,6 @@ export const MapExplorationScreen: React.FC = () => {
         <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
           <Text style={styles.title}>NavMelb</Text>
 
-          {/* Departure time input */}
           <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
             <Text style={{ marginRight: 8, color: "#444", fontSize: 13 }}>Depart at:</Text>
             <TextInput
@@ -240,7 +243,6 @@ export const MapExplorationScreen: React.FC = () => {
             />
           </View>
 
-          {/* Search mode toggle */}
           <View style={styles.searchModeContainer}>
             <TouchableOpacity
               style={[styles.modeButton, searchMode === "place" && styles.modeActive]}
@@ -256,7 +258,6 @@ export const MapExplorationScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Search bar */}
           <View style={styles.inputSection}>
             <TextInput
               style={styles.input}
@@ -274,13 +275,11 @@ export const MapExplorationScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Strategy hint */}
           <Text style={{ marginBottom: 8, color: "#666", fontSize: 12 }}>
-            {searchMode === "place" && "Driving route, even if station -> place so check station button."}
-            {searchMode === "station" && "Only station ->  Station will activate PTV."}
+            {searchMode === "place" && "Place stops route by car. Add station stops between places for PTV legs."}
+            {searchMode === "station" && "Adjacent station stops route by PTV. Other legs route by car."}
           </Text>
 
-          {/* Station search results */}
           {searchResults.length > 0 && (
             <ScrollView style={styles.resultsContainer} nestedScrollEnabled>
               {searchResults.map((result, index) => (
@@ -292,7 +291,7 @@ export const MapExplorationScreen: React.FC = () => {
                   <Text style={styles.resultText}>
                     {transportIcon(result.transportTypes)}{"  "}{result.displayName ?? result.name}
                     {result.routeNames && result.routeNames.length > 0
-                      ? `  ·  ${result.routeNames.slice(0, 3).join(" · ")}`
+                      ? `  -  ${result.routeNames.slice(0, 3).join(" - ")}`
                       : ""}
                   </Text>
                 </TouchableOpacity>
@@ -302,29 +301,28 @@ export const MapExplorationScreen: React.FC = () => {
 
           {error && <Text style={styles.error}>{error}</Text>}
 
-          {/* Journey chain: A -> B -> C -> ... */}
           {stops.length > 0 && (
             <View style={styles.resultBox}>
               <Text style={styles.resultLabel}>Journey:</Text>
               {stops.map((stop, i) => (
-                <View key={i} style={{ flexDirection: "row", alignItems: "center", marginVertical: 2 }}>
+                <View key={`${stop.name}-${i}`} style={{ flexDirection: "row", alignItems: "center", marginVertical: 2 }}>
                   <Text style={{ fontWeight: "bold", width: 24, color: "#333" }}>{stopLabel(i)}</Text>
                   <Text style={[styles.resultValue, { flex: 1 }]}>
                     {stop.type === "station" ? "Station: " : "Place: "}{stop.name}
                   </Text>
                   <TouchableOpacity onPress={() => removeStop(i)} style={{ paddingHorizontal: 6 }}>
-                    <Text style={{ color: "red", fontSize: 14 }}>✕</Text>
+                    <Text style={{ color: "red", fontSize: 14 }}>x</Text>
                   </TouchableOpacity>
-                    {i > 0 && (
-                      <TouchableOpacity onPress={() => moveStop(i, i - 1)}>
-                        <Text>↑</Text>
-                      </TouchableOpacity>
-                    )}
-                    {i < stops.length - 1 && (
-                      <TouchableOpacity onPress={() => moveStop(i, i + 1)}>
-                        <Text>↓</Text>
-                      </TouchableOpacity>
-                    )}
+                  {i > 0 && (
+                    <TouchableOpacity onPress={() => moveStop(i, i - 1)} style={{ paddingHorizontal: 4 }}>
+                      <Text>Up</Text>
+                    </TouchableOpacity>
+                  )}
+                  {i < stops.length - 1 && (
+                    <TouchableOpacity onPress={() => moveStop(i, i + 1)} style={{ paddingHorizontal: 4 }}>
+                      <Text>Down</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               ))}
               {stops.length < 2 && (
@@ -335,7 +333,6 @@ export const MapExplorationScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Route result summary */}
           {routeResult && (
             <View style={[styles.resultBox, styles.distanceBox]}>
               <Text style={styles.resultLabel}>Distance:</Text>
@@ -357,7 +354,7 @@ export const MapExplorationScreen: React.FC = () => {
                 <>
                   <Text style={styles.resultLabel}>Next departures:</Text>
                   {routeResult.departureInfo.map((d, i) => (
-                    <Text key={i} style={styles.resultValue}>
+                    <Text key={`${d.stationName}-${i}`} style={styles.resultValue}>
                       {d.stationName}: {d.waitTimeMinutes} min ({d.nextDeparture})
                     </Text>
                   ))}
@@ -366,18 +363,17 @@ export const MapExplorationScreen: React.FC = () => {
             </View>
           )}
 
-          {routeSegments.some(s => s.type === "failed") && (
-            <View style={[styles.resultBox]}>
+          {routeSegments.some((s) => s.type === "failed") && (
+            <View style={styles.resultBox}>
               <Text style={styles.resultLabel}>Some legs failed to calculate:</Text>
-              {routeSegments.filter(s => s.type === "failed").map((s, i) => (
-                <Text key={i} style={styles.resultValue}>
-                 No route: {(s as FailedLeg).from} → {(s as FailedLeg).to}
+              {routeSegments.filter((s): s is FailedLeg => s.type === "failed").map((s, i) => (
+                <Text key={`${s.from}-${s.to}-${i}`} style={styles.resultValue}>
+                  No route: {s.from} to {s.to}
                 </Text>
               ))}
             </View>
           )}
 
-          {/* Actions */}
           <View style={styles.actionButtons}>
             <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={resetForm}>
               <Text style={styles.buttonText}>Reset</Text>

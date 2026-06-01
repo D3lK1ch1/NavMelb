@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { View, Text } from "react-native";
 import { WebView } from "react-native-webview";
 import { RouteSegment } from "../types";
 
@@ -22,6 +22,7 @@ export default function MapComponent({
   onMapClick,
 }: MapComponentProps) {
   const webViewRef = useRef<WebView>(null);
+  const [mapError, setMapError] = useState<string | null>(null);
 
   const leafletHtml = `
 <!DOCTYPE html>
@@ -177,16 +178,28 @@ export default function MapComponent({
 
   return (
     <View style={{ flex: 1 }}>
+      {mapError && (
+        <View style={{ padding: 12, backgroundColor: "#ffebee", borderBottomWidth: 1, borderBottomColor: "#ffcdd2" }}>
+          <Text style={{ color: "#b00020", fontSize: 13 }}>{mapError}</Text>
+        </View>
+      )}
       <WebView
         ref={webViewRef}
         originWhitelist={["*"]}
         source={{ html: leafletHtml }}
         javaScriptEnabled
         domStorageEnabled
+        onLoadStart={() => setMapError(null)}
         onLoadEnd={() => {
           webViewRef.current?.postMessage(JSON.stringify({ type: "updateMarkers", markers }));
           webViewRef.current?.postMessage(JSON.stringify({ type: "updateWaypoints", waypoints }));
           webViewRef.current?.postMessage(JSON.stringify({ type: "updateRouteSegments", routeSegments }));
+        }}
+        onError={(event) => {
+          setMapError(event.nativeEvent.description || "Map failed to load");
+        }}
+        onHttpError={(event) => {
+          setMapError(`Map request failed with HTTP ${event.nativeEvent.statusCode}`);
         }}
         onMessage={(event) => {
           try {

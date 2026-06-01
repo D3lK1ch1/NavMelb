@@ -36,6 +36,7 @@ export interface RouteResult {
   totalDuration: number;
   estimatedArrival?: string;
   departureInfo?: DepartureInfo[];
+  failedLegs?: number;
 }
 
 export interface DepartureInfo {

@@ -34,10 +34,12 @@ export async function geocodeAddress(query: string): Promise<Coordinate | null> 
 
   await throttle();
 
+  const locationHint = /melbourne|victoria|\bvic\b/i.test(query) ? query : `${query}, Melbourne, Victoria`;
+
   try {
     const response = await axios.get(`${baseUrl}/search`, {
       params: {
-        q: query,
+        q: locationHint,
         format: "json",
         addressdetails: 0,
         limit: 1,
@@ -49,7 +51,7 @@ export async function geocodeAddress(query: string): Promise<Coordinate | null> 
         "User-Agent": getUserAgent(),
         "Accept-Language": "en",
       },
-      timeout: 10000,
+      timeout: 5000,
     });
 
     const first = Array.isArray(response.data) ? response.data[0] : null;

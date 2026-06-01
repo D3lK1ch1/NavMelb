@@ -49,7 +49,7 @@ export interface PTvRouteResult {
 }
 
 const baseUrl = "https://timetableapi.ptv.vic.gov.au/v3";
-const AVG_DWELL_SECONDS = 90;
+const AVG_DWELL_SECONDS = 210;
 
 let devId = "";
 let apiKey = "";
@@ -117,6 +117,22 @@ function pickBestStop(
   const pick = stationFirst ?? matching[0];
 
   return { stopId: pick.stopId, displayName: pick.displayName };
+}
+
+function isLonLatPair(value: unknown): value is [number, number] {
+  return Array.isArray(value) && typeof value[0] === "number" && typeof value[1] === "number";
+}
+
+function flattenLonLatPairs(value: unknown): Array<[number, number]> {
+  if (isLonLatPair(value)) {
+    return [[value[0], value[1]]];
+  }
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => flattenLonLatPairs(item));
 }
 
 export async function ptvSearchStops(
@@ -195,11 +211,22 @@ export async function ptvGetPatternWithStops(
       route_id: number;
       route_type: number;
     }>;
-    stops: Record<string, unknown>;
-  }>(`/pattern/run/${runRef}/route_type/${routeType}`, {params: {expand : "stop"}});
+    geopath?: Array<{
+      geometry?: {
+        type?: string;
+        coordinates?: unknown;
+      };
+    }>;
+  }>(`/pattern/run/${runRef}/route_type/${routeType}`, { params: { include_geopath: "true" } });
 
   const departures = response.data.departures;
   if (!departures?.length) return null;
+
+  const geopathEntry = response.data.geopath?.find((g) => flattenLonLatPairs(g.geometry?.coordinates).length > 0);
+  const geometry: number[][] = flattenLonLatPairs(geopathEntry?.geometry?.coordinates)
+    .map(([lng, lat]) => [lat, lng]) // GeoJSON [lng,lat] → Leaflet [lat,lng]
+
+  ;
 
   return {
     runRef,
@@ -209,7 +236,7 @@ export async function ptvGetPatternWithStops(
       stopId: d.stop_id,
       stopSequence: d.departure_sequence,
     })),
-    geometry: [],
+    geometry,
   };
 }
 
@@ -234,7 +261,7 @@ export async function ptvFindRouteBetweenStops(
   }
   dispatch({ type: "ptv.route.destination_found", stopId: dest.stopId, displayName: dest.displayName });
 
-  const departures = (await ptvGetDepartures(routeType, origin.stopId)).slice(0, 5);
+  const departures = (await ptvGetDepartures(routeType, origin.stopId, { limit: 20 }));
   if (!departures.length) {
     dispatch({ type: "ptv.route.no_departures", stopId: origin.stopId });
     return null;
@@ -253,7 +280,7 @@ export async function ptvFindRouteBetweenStops(
       const durationSeconds = seqDiff * AVG_DWELL_SECONDS;
       dispatch({ type: "ptv.route.success", from: fromStationName, to: toStationName, stops: seqDiff, durationSeconds });
       return {
-        geometry: [],
+        geometry: pattern.geometry,
         durationSeconds,
         platformNumber: dep.platformNumber,
       };

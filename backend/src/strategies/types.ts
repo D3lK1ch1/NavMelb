@@ -2,9 +2,13 @@ import { Coordinate, RouteSegment, FailedLeg, Waypoint } from "../types";
 
 export interface RouteCommand {
   origin: Coordinate;
+  originName?: string;
+  originType?: "station" | "place";
   destination: Coordinate;
+  destinationName?: string;
+  destinationType?: "station" | "place";
   waypoints: Waypoint[];
-  departureTime: string; // normalised HH:MM:SS
+  departureTime: string;
 }
 
 export interface RouteStrategyResult {

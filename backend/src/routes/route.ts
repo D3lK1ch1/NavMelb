@@ -1,11 +1,12 @@
 import { Router, Request, Response } from "express";
 import { ApiResponse, Coordinate, RouteResult, RouteStrategy, Waypoint, DepartureInfo, TransportType } from "../types";
-import { calculateDistance, lookupDestinationAny } from "../services/route-map.service";
+import { calculateDistance} from "../services/route-map.service";
 import { ptvSearchStops, ptvGetDepartures, ptvFindStopByName } from "../services/ptv-api.service";
 import { searchStreets, nearbyStreets } from "../services/street-data.service";
 import { IRouteStrategy, RouteCommand } from "../strategies/types";
 import { CarStrategy } from "../strategies/car.strategy";
 import { PtvStrategy, PtvValidationError } from "../strategies/ptv.strategy";
+import {geocodeAddress} from "../services/geocoding.service";
 import { dispatch } from "../events/dispatch";
 import { classifyInfraError } from "../events/infra";
 
@@ -59,7 +60,7 @@ router.get("/destination/lookup", async (req: Request, res: Response) => {
       });
     }
 
-    const coordinates = await lookupDestinationAny(query as string);
+    const coordinates = await geocodeAddress(query as string);
 
     if (!coordinates) {
       dispatch({ type: "destination.lookup.not_found", query: query as string });
@@ -215,12 +216,16 @@ router.get("/stations/search", async (req: Request, res: Response) => {
 
 router.post("/route/calculate", async (req: Request, res: Response) => {
   try {
-    const { origin, destination, waypoints, strategy, departureTime } = req.body as {
+    const { origin, destination, waypoints, strategy, departureTime, originType, originName, destinationType, destinationName } = req.body as {
       origin: Coordinate;
       destination: Coordinate;
       waypoints?: Waypoint[];
       strategy: RouteStrategy;
       departureTime?: string;
+      originType?: "station" | "place";
+      originName?: string;
+      destinationType?: "station" | "place";
+      destinationName?: string;
     };
 
     if (!origin || !destination || origin.lat == null || origin.lng == null || destination.lat == null || destination.lng == null) {
@@ -309,7 +314,11 @@ router.post("/route/calculate", async (req: Request, res: Response) => {
     // Build command and execute strategy
     const cmd: RouteCommand = {
       origin,
+      originType,
+      originName,
       destination,
+      destinationType,
+      destinationName,
       waypoints: waypoints || [],
       departureTime: resolvedDeparture,
     };

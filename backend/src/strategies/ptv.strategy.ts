@@ -1,21 +1,19 @@
-import { Coordinate, RouteSegment, FailedLeg } from "../types";
+import { Coordinate, RouteSegment, FailedLeg, TransportType } from "../types";
 import { calculateDistance, getPTVRoute, osrmRoute } from "../services/route-map.service";
 import { IRouteStrategy, RouteCommand, RouteStrategyResult } from "./types";
 
 const log = process.env.NODE_ENV !== "production" ? console.log : () => {};
 
-function advanceTime(currentTime: string, durationSeconds: number): string {
-  const parts = currentTime.split(":").map(Number);
-  const baseSec = parts[0] * 3600 + parts[1] * 60 + (parts[2] || 0);
-  const nextSec = baseSec + Math.round(durationSeconds);
-  const nh = Math.floor(nextSec / 3600) % 24;
-  const nm = Math.floor((nextSec % 3600) / 60);
-  return `${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}:00`;
+function toRouteType(types?: TransportType[]): number {
+  const first = types?.[0];
+  if (first === "tram") return 1;
+  if (first === "bus") return 2;
+  return 0;
 }
 
 export class PtvStrategy implements IRouteStrategy {
   async execute(cmd: RouteCommand): Promise<RouteStrategyResult> {
-    const { origin, destination, waypoints, departureTime } = cmd;
+    const { origin, destination, waypoints } = cmd;
 
     const stationStops = waypoints.filter((w) => w.type === "station");
     if (stationStops.length < 1) {
@@ -24,11 +22,10 @@ export class PtvStrategy implements IRouteStrategy {
       );
     }
 
-    // Build full point list: origin + all waypoints + destination
-    const allPoints: Array<{ position: Coordinate; type: "station" | "place"; name: string }> = [
-      { position: origin, type: "place", name: "Origin" },
-      ...waypoints.map((w) => ({ position: w.position, type: w.type, name: w.name || "" })),
-      { position: destination, type: "place", name: "Destination" },
+    const allPoints: Array<{ position: Coordinate; type: "station" | "place"; name: string; transportTypes?: TransportType[] }> = [
+      { position: origin, type: cmd.originType ?? "place", name: cmd.originName ?? "Origin" },
+      ...waypoints.map((w) => ({ position: w.position, type: w.type, name: w.name || "", transportTypes: w.transportTypes })),
+      { position: destination, type: cmd.destinationType ?? "place", name: cmd.destinationName ?? "Destination" },
     ];
 
     log(`[PtvStrategy] waypoints: ${stationStops.length} station(s)`);
@@ -37,7 +34,6 @@ export class PtvStrategy implements IRouteStrategy {
     const segments: (RouteSegment | FailedLeg)[] = [];
     let totalDistance = 0;
     let totalDuration = 0;
-    let currentTime = departureTime;
 
     for (let i = 0; i < allPoints.length - 1; i++) {
       const from = allPoints[i];
@@ -45,7 +41,7 @@ export class PtvStrategy implements IRouteStrategy {
 
       if (from.type === "station" && to.type === "station") {
         log(`[PtvStrategy] Leg ${i + 1}: PTV "${from.name}" -> "${to.name}"`);
-        const ptv = await getPTVRoute(from.position, to.position, from.name, to.name);
+        const ptv = await getPTVRoute(from.position, to.position, from.name, to.name, toRouteType(from.transportTypes));
         if (!ptv) {
           log(`[PtvStrategy] Leg ${i + 1}: FAILED`);
           segments.push({ type: "failed", from: from.name, to: to.name });
@@ -63,7 +59,6 @@ export class PtvStrategy implements IRouteStrategy {
         });
         totalDistance += dist;
         totalDuration += ptv.duration;
-        currentTime = advanceTime(currentTime, ptv.duration);
       } else {
         log(`[PtvStrategy] Leg ${i + 1}: Car "${from.name}" -> "${to.name}"`);
         const car = await osrmRoute(from.position, to.position);

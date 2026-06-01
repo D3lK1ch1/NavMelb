@@ -41,15 +41,17 @@ services:
   backend:
     build:
       context: ./backend
+    env_file:
+      - backend/.env
     ports:
       - "3000:3000"
     environment:
       - OSRM_URL=http://osrm:5000
       - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:8081}
-      - GTFS_ROOT=/gtfs
       - NODE_ENV=production
-    volumes:
-      - ./gtfs:/gtfs:ro
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     depends_on:
       - osrm
     restart: unless-stopped
