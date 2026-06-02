@@ -291,6 +291,25 @@ export async function ptvFindRouteBetweenStops(
   return null;
 }
 
+export async function ptvGetRouteNamesForStop(stopId: number, routeType: number): Promise<string[]> {
+  try {
+    const c = getClient();
+    const response = await c.get<{
+      stop: {
+        routes?: Array<{ route_number?: string; route_name?: string }>;
+      };
+    }>(`/stops/${stopId}/route_type/${routeType}`);
+
+    const routes = response.data.stop?.routes ?? [];
+    return routes
+      .map((r) => r.route_number?.trim() || r.route_name?.trim() || "")
+      .filter(Boolean)
+      .slice(0, 3) as string[];
+  } catch {
+    return [];
+  }
+}
+
 export async function ptvFindStopByName(
   name: string,
   routeType = 0

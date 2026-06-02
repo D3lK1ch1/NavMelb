@@ -2,30 +2,26 @@ import { describe, it, expect, beforeAll, vi } from "vitest";
 import request from "supertest";
 import type { Express } from "express";
 import { createTestApp } from "../helpers/create-app";
-import { ptvFindStopByName, ptvGetDepartures, ptvSearchStops } from "../../services/ptv-api.service";
+import { ptvFindStopByName, ptvGetDepartures, ptvSearchStops, ptvGetRouteNamesForStop } from "../../services/ptv-api.service";
 
 vi.mock("../../services/ptv-api.service", () => ({
   ptvSearchStops: vi.fn(async () => [
     {
+      stopId: 1071,
       displayName: "Flinders Street Station",
       position: { lat: -37.8183, lng: 144.9671 },
       routeType: [0],
     },
-  ]),
-  ptvGetDepartures: vi.fn(async () => []),
-  ptvFindStopByName: vi.fn(async () => null),
-}));
-
-vi.mock("../../services/ptv-api.service", () => ({
-  ptvSearchStops: vi.fn(async () => [
     {
-      displayName: "Fliders Street Station",
-      position: { lat: -37.8183, lng: 144.9671 },
+      stopId: 2001,
+      displayName: "Flinders Street/Swanston St",
+      position: { lat: -37.8180, lng: 144.9694 },
       routeType: [1],
     },
   ]),
   ptvGetDepartures: vi.fn(async () => []),
   ptvFindStopByName: vi.fn(async () => null),
+  ptvGetRouteNamesForStop: vi.fn(async () => ["96", "16"]),
 }));
 
 
@@ -101,5 +97,29 @@ describe("GET /api/map/stations/search", () => {
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
     expect(res.body.error).toMatch(/missing/i);
+  });
+
+  it("includes routeNames for tram stops", async () => {
+    const res = await request(app)
+      .get("/api/map/stations/search")
+      .query({ query: "flinders", transportType: "tram" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBeGreaterThan(0);
+    const tram = res.body.data[0];
+    expect(tram.transportTypes).toContain("tram");
+    expect(tram.routeNames).toEqual(["96", "16"]);
+  });
+
+  it("does not include routeNames for train stops", async () => {
+    const res = await request(app)
+      .get("/api/map/stations/search")
+      .query({ query: "flinders", transportType: "train" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBeGreaterThan(0);
+    const train = res.body.data[0];
+    expect(train.transportTypes).toContain("train");
+    expect(train.routeNames).toBeUndefined();
   });
 });

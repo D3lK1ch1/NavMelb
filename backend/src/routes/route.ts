@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { ApiResponse, Coordinate, RouteResult, RouteStrategy, Waypoint, DepartureInfo, TransportType } from "../types";
 import { calculateDistance} from "../services/route-map.service";
-import { ptvSearchStops, ptvGetDepartures, ptvFindStopByName } from "../services/ptv-api.service";
+import { ptvSearchStops, ptvGetDepartures, ptvFindStopByName, ptvGetRouteNamesForStop } from "../services/ptv-api.service";
 import { searchStreets, nearbyStreets } from "../services/street-data.service";
 import { IRouteStrategy, RouteCommand } from "../strategies/types";
 import { CarStrategy } from "../strategies/car.strategy";
@@ -186,13 +186,26 @@ router.get("/stations/search", async (req: Request, res: Response) => {
     });
 
     const pageLimit = limit !== undefined && !isNaN(Number(limit)) ? Number(limit) : 50;
-    const results = filtered
-      .slice(0, pageLimit)
-      .map((s) => ({
-        name: s.displayName,
-        position: s.position,
-        transportTypes: s.routeType?.length ? s.routeType.map((t) => (["train", "tram", "bus"][t]) as TransportType) : (["train"] as TransportType[]),
-      }));
+    const ENRICHMENT_LIMIT = 10;
+    const results = await Promise.all(
+      filtered.slice(0, pageLimit).map(async (s, idx) => {
+        const transportTypes: TransportType[] = s.routeType?.length
+          ? s.routeType.map((t) => (["train", "tram", "bus"][t]) as TransportType)
+          : ["train"];
+
+        const isTramOrBus = s.routeType.includes(1) || s.routeType.includes(2);
+        const routeNames = idx < ENRICHMENT_LIMIT && isTramOrBus
+          ? await ptvGetRouteNamesForStop(s.stopId, s.routeType.find((t) => t === 1 || t === 2) ?? 1)
+          : undefined;
+
+        return {
+          name: s.displayName,
+          position: s.position,
+          transportTypes,
+          ...(routeNames?.length ? { routeNames } : {}),
+        };
+      })
+    );
 
     dispatch({ type: "stations.search.success", query: query as string, count: results.length });
 
