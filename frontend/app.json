@@ -7,6 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "frontend",
     "userInterfaceStyle": "automatic",
+    "privacy": "public",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
@@ -43,6 +44,18 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "3553a64a-f0e1-49f0-843e-844022db43b6"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/3553a64a-f0e1-49f0-843e-844022db43b6"
     }
   }
 }
