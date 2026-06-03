@@ -12,9 +12,9 @@ Built with a Node.js backend for geocoding, changing from RAPTOR + GTFS to PTV A
 
 ## Try it (v0 beta)
 
-<!-- Add QR code image here after EAS update is published -->
+![Scan with Expo Go](https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=exp%3A%2F%2Fu.expo.dev%2F3553a64a-f0e1-49f0-843e-844022db43b6%3Fchannel-name%3Dpreview)
 
-Requires [Expo Go](https://expo.dev/go) on Android or iOS. Create a free Expo account first, then scan the QR.
+Requires [Expo Go](https://expo.dev/go) on Android or iOS. Create a free [Expo account](https://expo.dev/signup) first, then scan the QR.
 
 **Train routing works. Tram and bus routing are in progress.**
 
