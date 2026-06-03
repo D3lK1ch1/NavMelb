@@ -6,15 +6,13 @@ A multimodal navigation app for Melbourne — combines car and public transport 
 
 NavMelb is a mobile app showing the map, with buttons on the UI to choose where the user is now, choose between car or PTV to start routing, with Stations to search for the various stations according to the data stored for this map that will build the route between starting point and destination, allowing multiple waypoints and transport switch instead of choosing either / or with car and PTV.
 
-Built with a Node.js backend for geocoding, changing from RAPTOR + GTFS to PTV API for fresher data in beta production with plans to revisit RAPTOR as an algorithm fr better routing and a React Expo frontend working only on mobile to show the leaflet map.
+Built with a Node.js backend for geocoding, changing from RAPTOR + GTFS to PTV API for fresher data in beta production with plans to revisit RAPTOR as an algorithm for better routing and a React Expo frontend working only on mobile to show the leaflet map.
 
 ---
 
 ## Try it (v0 beta)
 
-![Scan with Expo Go](https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=exp%3A%2F%2Fu.expo.dev%2F3553a64a-f0e1-49f0-843e-844022db43b6%3Fchannel-name%3Dpreview)
-
-Requires [Expo Go](https://expo.dev/go) on Android or iOS. Create a free [Expo account](https://expo.dev/signup) first, then scan the QR.
+Beta distribution coming soon — Android APK and iOS TestFlight builds in progress.
 
 **Train routing works. Tram and bus routing are in progress.**
 
@@ -138,10 +136,10 @@ To add on once sure of the quality.
 
 ## Roadmap
 
-- [ x ] Replace Raptor + GTFS with PTV API — swap point is `getPTVRoute()` in `route-map.service.ts`
-- [ ] Tram routing - frontend stratergy selection fix in progress
-- [ ] Bus routing - follows from tram fix
-- [ ] Deploy to Fly.io + Expo Go QR Code
+- [x] Replace RAPTOR + GTFS with PTV API
+- [x] Deploy backend to Fly.io + Expo Go QR code
+- [ ] Tram routing — frontend strategy selection fix in progress
+- [ ] Bus routing — follows from tram fix
 
 
 **Longer term:**
