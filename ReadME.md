@@ -10,9 +10,31 @@ Built with a Node.js backend for geocoding, changing from RAPTOR + GTFS to PTV A
 
 ---
 
+## Try it (v0 beta)
+
+<!-- Add QR code image here after EAS update is published -->
+
+Requires [Expo Go](https://expo.dev/go) on Android or iOS. Create a free Expo account first, then scan the QR.
+
+**Train routing works. Tram and bus routing are in progress.**
+
+---
+
+## Report a bug or request a feature
+
+[Open an issue](https://github.com/D3lK1ch1/NavMelb/issues) — check existing issues first to avoid duplicates.
+
+**Known limitations in v0:**
+- Tram and bus routing not yet working (shows as car leg)
+- Transfer routing requires manually adding intermediate station stops
+- Walking legs estimated as car distance
+- Car legs use straight-line estimate
+
+---
+
 ## Current Features
 
-- **Multimodal waypoint chaining** — mix car and PTV legs across any number of stops; station-to-station pairs route via GTFS timetable, everything else drives via OSRM
+- **Multimodal waypoint chaining** — mix car and PTV legs across any number of stops; station-to-station pairs route via PTV API, everything else uses straight-line car estimate
 - **Partial route failure handling** — if one leg has no route, successful legs still display and the broken leg is flagged inline (HTTP 207)
 - **Station search** — search PTV API stops by name and transport type (train / tram / bus), with route names and display names returned
 - **Address geocoding** — place lookup via Nominatim, throttled and cached, bounded to Melbourne
@@ -27,7 +49,7 @@ Built with a Node.js backend for geocoding, changing from RAPTOR + GTFS to PTV A
 | Mobile frontend | React Native (Expo) |
 | Map rendering | Leaflet + OpenStreetMap (WebView) |
 | Backend | Node.js + Express + TypeScript |
-| Car routing | OSRM (self-hosted via Docker) |
+| Car routing | Haversine straight-line estimate (OSRM optional, self-hosted) |
 | Transit routing | PTV Timetable API |
 | Geocoding | Nominatim (OpenStreetMap) |
 
