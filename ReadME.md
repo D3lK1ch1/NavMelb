@@ -12,7 +12,9 @@ Built with a Node.js backend for geocoding, changing from RAPTOR + GTFS to PTV A
 
 ## Try it (v0 beta)
 
-Beta distribution coming soon — Android APK and iOS TestFlight builds in progress.
+**Android:** [Download APK](https://github.com/D3lK1ch1/NavMelb/releases/download/v0.1.0/application-295a5b55-16c6-4232-802c-8e5f7a769cd9.apk) — open the link on your Android device, tap Install, allow unknown sources if prompted.
+
+**iOS:** TestFlight coming soon.
 
 **Train routing works. Tram and bus routing are in progress.**
 
@@ -137,7 +139,7 @@ To add on once sure of the quality.
 ## Roadmap
 
 - [x] Replace RAPTOR + GTFS with PTV API
-- [x] Deploy backend to Fly.io + Expo Go QR code
+- [x] Deploy backend to Fly.io + Android APK (v0.1.0)
 - [ ] Tram routing — frontend strategy selection fix in progress
 - [ ] Bus routing — follows from tram fix
 
